@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<!-- Copyright (c) 2026 Marina Bay's Cafe. All rights reserved. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="security.js"></script>
+<script src="firebase-config.js"></script>
+<script src="cloud.js" data-uses="inventory,invlog"></script>
+<meta name="robots" content="noindex, nofollow">
+<meta name="author" content="Marina Bay's Cafe">
+<meta name="copyright" content="Copyright 2026 Marina Bay's Cafe. All rights reserved.">
+<title>Inventory | Marina Bay's Cafe</title>
+<meta name="theme-color" content="#0d3a4e">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/counter-apple-touch-icon.png">
+<link rel="stylesheet" href="app.css">
+<style>
+  .tabs { grid-template-columns: repeat(4, 1fr); }
+  table.sh { width: 100%; border-collapse: collapse; font-size: 15px; } table.sh th { font-size: 12px; color: var(--muted); padding: 6px 3px; text-align: center; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: #fff; }
+  table.sh td { padding: 3px; border-top: 1px solid var(--line); text-align: center; } table.sh td:first-child, table.sh th:first-child { text-align: left; padding-left: 12px; min-width: 130px; }
+  table.sh tr.g td { background: var(--soft); font-weight: 650; text-align: left; font-size: 13px; color: var(--muted); }
+  table.sh input { width: 54px; height: 38px; text-align: center; font: inherit; border: 1.5px solid #d6cfc3; border-radius: 6px; background: #fff; color: var(--ink); -moz-appearance: textfield; }
+  table.sh input:disabled { border-color: transparent; background: none; } table.sh input:focus { outline: none; border-color: var(--teal); }
+  table.sh input::-webkit-outer-spin-button, table.sh input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  table.sh td.tot { font-weight: 650; } table.sh td.ci input { font-weight: 650; background: var(--soft); } table.sh tr.zero td:first-child, table.sh tr.zero td.ci input { color: var(--bad); }
+  table.sh small { display: block; font-size: 10px; color: var(--teal); line-height: 1.1; }
+  .shbar { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 16px 0; } .shbar .field { flex: 1 1 130px; min-width: 0; }
+  @media print { .top, .tabs, .chips, .shbar button, .addbar, .rec-note { display: none !important; } table.sh input { border: 0 !important; background: none !important; } }
+  .grp { padding: 14px 16px 6px; font-size: 13px; font-weight: 650; color: var(--muted); background: var(--soft); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .irow { display: flex; align-items: center; gap: 10px; padding: 8px 12px 8px 16px; border-bottom: 1px solid var(--line); min-height: 58px; }
+  .irow .what { flex: 1; min-width: 0; background: none; border: none; text-align: left; font: inherit; color: var(--ink); padding: 4px 0; cursor: pointer; }
+  .irow .what b { display: block; font-weight: 600; line-height: 1.25; }
+  .irow .what span { display: block; font-size: 12px; color: var(--muted); }
+  .irow.out .what b { color: var(--bad); }
+  .step { display: flex; align-items: center; gap: 4px; flex: none; }
+  .step button { width: 38px; height: 38px; border-radius: 6px; font: inherit; font-size: 22px; line-height: 1; cursor: pointer; border: 1.5px solid #c9c1b5; background: #fff; color: var(--ink); }
+  .step button.plus { background: var(--teal); border-color: var(--teal); color: #fff; }
+  .step button:disabled { opacity: .35; }
+  .step input { width: 56px; height: 38px; text-align: center; font: inherit; font-weight: 650; border: none; border-bottom: 1.5px solid #c9c1b5; background: none; color: var(--ink); border-radius: 0; -moz-appearance: textfield; }
+  .step input::-webkit-outer-spin-button, .step input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .step input:focus { outline: none; border-bottom-color: var(--teal); }
+  .summary { padding: 8px 16px; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--line); }
+  .addbar { border-top: 1px solid var(--line); padding: 10px 16px; background: #fff; }
+  .addbar .add-btn { margin: 0; width: 100%; }
+</style>
+<link rel="stylesheet" href="wide.css">
+<link rel="stylesheet" href="brand.css">
+<style>
+  .rec { margin: 0 16px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+  .rec summary { padding: 11px 14px; font-weight: 650; cursor: pointer; }
+  .rec-body { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 14px 8px; }
+  .rec-body .field { flex: 1 1 140px; min-width: 0; } .rec-body #recAmt { flex: 0 1 90px; }
+  .rec-kind { display: flex; border: 1px solid #c5d0d0; border-radius: 10px; overflow: hidden; }
+  .rec-kind button { border: 0; background: #fff; font: inherit; padding: 0 16px; min-height: 44px; cursor: pointer; }
+  .rec-kind button.on { background: var(--teal, #0d3a4e); color: #fff; font-weight: 650; }
+  .rec-note { padding: 0 14px 12px; font-size: 12px; color: var(--muted); } .rec-note a { color: var(--teal); font-weight: 650; }
+  .dl-bar { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 16px; } .dl-bar .field { flex: 1 1 150px; }
+  .dl-wrap { overflow-x: auto; padding: 0 16px; }
+  table.inv { width: 100%; border-collapse: collapse; font-size: 15px; }
+  table.inv th { text-align: right; font-size: 13px; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  table.inv td { padding: 8px; border-top: 1px solid var(--line); text-align: right; }
+  table.inv th:first-child, table.inv td:first-child, table.inv th:last-child, table.inv td:last-child { text-align: left; }
+  table.inv tr.g td { background: var(--soft); font-weight: 650; text-align: left; }
+</style>
+</head>
+<body class="pg-inventory">
+<div class="app">
+  <div class="top">
+    <a href="index.html" aria-label="Home" style="display:flex"><img src="icons/logo-64.png" alt=""></a>
+    <div><b>Marina Bay's Cafe</b><span class="sub">Inventory</span></div>
+    <nav class="apps" aria-label="Apps"><a href="index.html">All apps</a></nav>
+  </div>
+
+  <!-- STOCK -->
+  <div id="stockTop">
+    <div class="searchbar"><input id="q" type="search" placeholder="Search the stock list" autocomplete="off"></div>
+    <details class="rec" id="rec"><summary>Record used or added stock</summary>
+      <div class="rec-body">
+        <div class="rec-kind"><button type="button" data-kind="used" class="on">Used</button><button type="button" data-kind="add">Added</button></div>
+        <input class="field" id="recQ" type="search" placeholder="Search item" autocomplete="off">
+        <select class="field" id="recSel"></select>
+        <label class="rec-date" style="flex:1 1 100%;font-size:13px;color:var(--muted)">Date of the change <input class="field" id="recDate" type="date" style="margin-left:6px"></label>
+        <input class="field num" id="recAmt" type="number" inputmode="decimal" min="0" step="any" placeholder="Amount">
+        <button class="primary" id="recDone" type="button">Done</button>
+      </div>
+      <div class="rec-note">Used is for loss or anything not counted from sales. Cups and lids come off automatically when a shift is closed. Changing a count with the + and &minus; buttons is recorded too. <a href="calendar.html" id="calLink">Open the calendar</a> to see Beg, Added, Used and End per day, and to save it as .xlsx.</div>
+    </details>
+    <div class="chips" id="chips"></div>
+    <div class="summary" id="summary"></div>
+  </div>
+
+  <main id="main">
+    <section class="view on" id="v-sheet">
+      <div class="shbar"><input class="field" id="shDate" type="date" aria-label="Date"><input class="field" id="shBy" type="text" maxlength="30" placeholder="Barista / Staff" autocomplete="off"><input class="field" id="shQ" type="search" placeholder="Search" autocomplete="off"><button class="secondary" id="shPrint" type="button">Print</button></div>
+      <div class="chips" id="shChips"></div>
+      <div class="dl-wrap" style="padding:0"><table class="sh" id="shTable"></table></div>
+      <div class="rec-note" style="padding:8px 16px 16px">OI is the opening count (yesterday's CI). Type what came <b>IN</b>, then either what went <b>OUT</b> or the closing count <b>CI</b>; the other one and the TOTAL work themselves out. Cups and lids come off OUT by themselves with every order and go back on a refund. Press Enter to jump to the next item.</div>
+    </section>
+    <section class="view" id="v-stock"><div id="list"></div></section>
+
+    <!-- ITEM EDIT -->
+    <section class="view" id="v-daily">
+      <div class="dl-bar"><input class="field" id="dlDate" type="date"><button class="secondary" id="dlToday" type="button">Today</button><button class="secondary" id="dlAll" type="button">Show all items</button><button class="primary" id="dlX" type="button">Save as .xlsx</button></div>
+      <div class="dl-wrap"><table class="inv" id="dlTable"></table></div>
+      <div class="rec-note" style="padding:8px 16px 16px">Beg is the previous day's End. Added and Used come from the + and &minus; buttons, the record form, and cups and lids taken off when a shift is closed. <a href="calendar.html" id="dlCal">Open the calendar</a></div>
+    </section>
+    <section class="view" id="v-item">
+      <div class="editbar"><button class="icon-btn" id="back" aria-label="Back">&#8249;</button><b id="itemTitle">Item</b></div>
+      <div class="frow"><label for="iName">Name</label><input class="field" id="iName" type="text" maxlength="60" autocomplete="off"></div>
+      <div class="frow"><label for="iGroup">Group</label><input class="field" id="iGroup" type="text" list="groups" maxlength="30" placeholder="Cups, Syrups..." autocomplete="off"><datalist id="groups"></datalist></div>
+      <div class="frow"><label for="iQty">Amount</label><input class="field num" id="iQty" type="number" inputmode="numeric" min="0" step="1" placeholder="Not counted"></div>
+      <div class="frow"><label for="iUnit">Unit</label><datalist id="unitList"></datalist><input class="field" id="iUnit" list="unitList" type="text" maxlength="15" placeholder="Pick or type: pcs, box, pack, bottle" autocomplete="off"></div>
+      <div class="block"><label for="iNote">Note</label><textarea class="field" id="iNote" rows="2" maxlength="200"></textarea></div>
+      <p class="help" id="iUpdated"></p>
+      <div class="actions"><button class="primary" id="saveItem">Save</button><button class="text-btn danger" id="delItem">Delete</button></div>
+    </section>
+
+    <!-- DATA -->
+    <section class="view" id="v-data">
+      <div class="prow" style="cursor:default"><div class="what"><b id="stat"></b><span class="s">The starting list comes from inventory-default.js. Changes made here are saved on this device.</span></div></div>
+      <button class="prow" id="backup"><div class="what"><b>Save a backup</b><span class="s">Downloads the whole stock list as a file</span></div><i>&#8250;</i></button>
+      <button class="prow" id="restore"><div class="what"><b>Restore from a backup</b><span class="s">Replaces the list with a saved backup file</span></div><i>&#8250;</i></button>
+      <input type="file" id="file" accept=".json,application/json" hidden>
+      <button class="prow" id="csv"><div class="what"><b>Export to spreadsheet (CSV)</b><span class="s">One row per item</span></div><i>&#8250;</i></button>
+      <button class="prow" id="reset"><div class="what"><b style="color:var(--bad)">Reset to the starting list</b><span class="s">Goes back to the starting list with every amount at zero</span></div><i>&#8250;</i></button>
+    </section>
+  </main>
+
+  <div class="addbar" id="addbar"><button class="add-btn" id="addItem">Add item</button></div>
+  <nav class="tabs">
+    <button class="tab on" data-v="sheet">Sheet</button>
+    <button class="tab" data-v="stock">Stock</button>
+    <button class="tab" data-v="daily">Daily</button>
+    <button class="tab" data-v="data">Data</button>
+  </nav>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="inventory-default.js"></script>
+<script src="app-data.js"></script>
+<script src="inv-log.js"></script>
+<script src="pos-config.js"></script>
+<script>
+(function () {
+  var D = window.MBData, esc = D.esc, $ = function (id) { return document.getElementById(id); };
+  var V = D.getInventory();
+  function persist(msg) { if (!D.saveInventory()) D.toast('Could not save. Storage may be full.'); else if (msg) D.toast(msg); }
+
+  var filter = 'all';
+  function groupsList() {
+    var seen = [];
+    V.items.forEach(function (i) { var g = i.group || 'Other'; if (seen.indexOf(g) === -1) seen.push(g); });
+    return seen;
+  }
+  function outCount() { return V.items.filter(function (i) { return i.qty === 0; }).length; }
+
+  /* ---------- stock list ---------- */
+  function paintChips() {
+    var gs = groupsList();
+    if (filter !== 'all' && filter !== 'out' && gs.indexOf(filter) === -1) filter = 'all';
+    var h = '<button class="chip' + (filter === 'all' ? ' on' : '') + '" data-f="all">All</button>' +
+      '<button class="chip' + (filter === 'out' ? ' on' : '') + '" data-f="out">Out of stock (' + outCount() + ')</button>';
+    gs.forEach(function (g) { h += '<button class="chip' + (filter === g ? ' on' : '') + '" data-f="' + esc(g) + '">' + esc(g) + '</button>'; });
+    $('chips').innerHTML = h;
+  }
+  $('chips').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-f]'); if (!b) return;
+    filter = b.getAttribute('data-f'); paintAll();
+    if (b.scrollIntoView) b.scrollIntoView({ inline: 'center', block: 'nearest' });
+  });
+  $('q').addEventListener('input', paintList);
+
+  function whatHtml(it) {
+    var sub = [];
+    if (it.qty === 0) sub.push('Out of stock'); else if (it.qty === null || it.qty === undefined) sub.push('Not counted');
+    if (it.unit) sub.push(it.unit);
+    if (it.note) sub.push(it.note);
+    return '<b>' + esc(it.name) + '</b>' + (sub.length ? '<span>' + esc(sub.join(' · ')) + '</span>' : '');
+  }
+  function rowHtml(it) {
+    var out = it.qty === 0;
+    return '<div class="irow' + (out ? ' out' : '') + '" data-id="' + esc(it.id) + '"><button class="what" data-edit="' + esc(it.id) + '">' + whatHtml(it) + '</button>' +
+      '<div class="step"><button data-m="' + esc(it.id) + '" aria-label="One less"' + (!it.qty ? ' disabled' : '') + '>&minus;</button>' +
+      '<input class="num" type="number" inputmode="numeric" min="0" step="1" data-q="' + esc(it.id) + '" value="' + (it.qty === null || it.qty === undefined ? '' : it.qty) + '" placeholder="-" aria-label="Amount of ' + esc(it.name) + '">' +
+      '<button class="plus" data-p="' + esc(it.id) + '" aria-label="One more">+</button></div></div>';
+  }
+  function paintList() {
+    var q = $('q').value.trim().toLowerCase(), h = '', lastG = null, n = 0;
+    V.items.forEach(function (it) {
+      var g = it.group || 'Other';
+      if (filter === 'out' && it.qty !== 0) return;
+      if (filter !== 'all' && filter !== 'out' && g !== filter) return;
+      if (q && (it.name + ' ' + g).toLowerCase().indexOf(q) === -1) return;
+      if (filter === 'all' || filter === 'out' || q) { /* headings only when mixed groups are shown */ }
+      if (g !== lastG) { lastG = g; h += '<div class="grp">' + esc(g) + '</div>'; }
+      h += rowHtml(it); n++;
+    });
+    $('list').innerHTML = h || '<div class="empty">' + (V.items.length ? 'Nothing matches.' : 'The list is empty. Tap Add item to start.') + '</div>';
+    $('summary').textContent = V.items.length + ' items · ' + outCount() + ' out of stock' + (n !== V.items.length ? ' · showing ' + n : '');
+  }
+  function paintAll() { paintChips(); paintList(); }
+
+  function find(id) { return V.items.filter(function (i) { return i.id === id; })[0]; }
+  function setQty(id, qty) {
+    var it = find(id); if (!it) return;
+    var old = it.qty; it.qty = qty; it.updated = D.todayPH(); persist();
+    if (window.MBInvLog) MBInvLog.onQty(id, old, qty);
+  }
+  $('list').addEventListener('click', function (e) {
+    var p = e.target.closest('button[data-p]'), m = e.target.closest('button[data-m]'), ed = e.target.closest('button[data-edit]');
+    if (p) { var it = find(p.getAttribute('data-p')); setQty(it.id, (it.qty || 0) + 1); paintAll(); }
+    else if (m) { var it2 = find(m.getAttribute('data-m')); setQty(it2.id, Math.max(0, (it2.qty || 0) - 1)); paintAll(); }
+    else if (ed) openItem(ed.getAttribute('data-edit'));
+  });
+  $('list').addEventListener('change', function (e) {
+    var i = e.target.closest('input[data-q]'); if (!i) return;
+    var v = i.value.trim();
+    var id = i.getAttribute('data-q');
+    setQty(id, v === '' ? null : Math.max(0, Math.floor(Number(v)) || 0));
+    // update this row in place so a tap on a nearby button is not lost
+    var it = find(id), row = i.closest('.irow');
+    row.classList.toggle('out', it.qty === 0);
+    row.querySelector('.what').innerHTML = whatHtml(it);
+    row.querySelector('button[data-m]').disabled = !it.qty;
+    i.value = it.qty === null ? '' : it.qty;
+    paintChips();
+    $('summary').textContent = V.items.length + ' items · ' + outCount() + ' out of stock';
+  });
+  $('list').addEventListener('focusin', function (e) { if (e.target.matches('input[data-q]')) e.target.select(); });
+
+  /* ---------- item edit ---------- */
+  var ed = null, isNew = false;
+  function openItem(id) {
+    if (id) { ed = D.clone(find(id)); isNew = false; }
+    else {
+      var g = filter !== 'all' && filter !== 'out' ? filter : (V.items.length ? V.items[V.items.length - 1].group : 'Other');
+      ed = { id: D.uid('inv'), name: '', group: g || 'Other', qty: null, unit: '', note: '', updated: D.todayPH() }; isNew = true;
+    }
+    $('itemTitle').textContent = isNew ? 'Add item' : 'Edit item';
+    $('iName').value = ed.name; $('iGroup').value = ed.group || ''; $('iQty').value = ed.qty === null || ed.qty === undefined ? '' : ed.qty;
+    $('iUnit').value = ed.unit || ''; $('iNote').value = ed.note || '';
+    $('unitList').innerHTML = (window.MBConfig ? MBConfig.get().units : ['pcs','box','pack','bottle']).map(function (u) { return '<option value="' + esc(u) + '">'; }).join('');
+    $('groups').innerHTML = groupsList().map(function (g) { return '<option value="' + esc(g) + '">'; }).join('');
+    $('iUpdated').textContent = isNew ? 'New items are added to the end of their group.' : 'Last changed ' + ed.updated;
+    $('delItem').style.display = isNew ? 'none' : '';
+    setView('item');
+  }
+  $('addItem').onclick = function () { openItem(null); };
+  $('back').onclick = function () { setView('stock'); };
+  $('saveItem').onclick = function () {
+    var name = $('iName').value.trim();
+    if (!name) { D.toast('Enter a name'); $('iName').focus(); return; }
+    var dup = V.items.filter(function (i) { return i.id !== ed.id && i.name.toLowerCase() === name.toLowerCase(); })[0];
+    if (dup && !confirm('"' + dup.name + '" is already on the list. Save anyway?')) return;
+    var qv = $('iQty').value.trim();
+    ed.name = name; ed.group = $('iGroup').value.trim() || 'Other';
+    ed.qty = qv === '' ? null : Math.max(0, Math.floor(Number(qv)) || 0);
+    ed.unit = $('iUnit').value.trim(); ed.note = $('iNote').value.trim(); ed.updated = D.todayPH();
+    var idx = -1; V.items.forEach(function (x, n) { if (x.id === ed.id) idx = n; });
+    var oldQ = idx === -1 ? null : V.items[idx].qty;
+    if (idx === -1) {
+      // keep new items inside their group: insert after the last item of that group
+      var last = -1; V.items.forEach(function (x, n) { if ((x.group || 'Other') === ed.group) last = n; });
+      if (last === -1) V.items.push(ed); else V.items.splice(last + 1, 0, ed);
+    } else if ((V.items[idx].group || 'Other') !== ed.group) {
+      V.items.splice(idx, 1);
+      var last2 = -1; V.items.forEach(function (x, n) { if ((x.group || 'Other') === ed.group) last2 = n; });
+      if (last2 === -1) V.items.push(ed); else V.items.splice(last2 + 1, 0, ed);
+    } else V.items[idx] = ed;
+    persist('Saved'); if (window.MBInvLog) MBInvLog.onQty(ed.id, oldQ, ed.qty); setView('stock');
+  };
+  $('delItem').onclick = function () {
+    if (!confirm('Delete "' + ed.name + '" from the list?')) return;
+    V.items = V.items.filter(function (x) { return x.id !== ed.id; }); D.getInventory().items = V.items;
+    persist('Deleted'); setView('stock');
+  };
+
+  /* ---------- views ---------- */
+  /* ---------- record used / added ---------- */
+  var recKind = 'used';
+  function recOpts() {
+    var q = $('recQ').value.trim().toLowerCase();
+    $('recSel').innerHTML = V.items.filter(function (i) { return !q || i.name.toLowerCase().indexOf(q) > -1; }).map(function (i) {
+      return '<option value="' + esc(i.id) + '">' + esc(i.name) + (i.unit ? ' (' + esc(i.unit) + ')' : '') + '</option>'; }).join('');
+  }
+  $('rec').addEventListener('toggle', function () { if ($('rec').open) recOpts(); });
+  $('recQ').addEventListener('input', recOpts);
+  $('rec').addEventListener('click', function (e) {
+    var k = e.target.closest('button[data-kind]');
+    if (k) { recKind = k.getAttribute('data-kind'); Array.prototype.forEach.call($('rec').querySelectorAll('.rec-kind button'), function (b) { b.classList.toggle('on', b === k); }); }
+  });
+  $('recDone').onclick = function () {
+    var n = parseFloat($('recAmt').value), id = $('recSel').value;
+    if (!id || !(n > 0)) { D.toast('Pick an item and enter an amount'); return; }
+    var rd = $('recDate').value || MBInvLog.localToday();
+    if (rd > MBInvLog.localToday()) { D.toast('That day has not happened yet'); return; }
+    var msg = MBInvLog.adjust(recKind, id, n, rd);
+    if (msg) { D.toast(msg); return; }
+    $('recDate').value = MBInvLog.localToday();
+    $('recAmt').value = ''; $('recQ').value = ''; recOpts(); paintAll(); D.toast('Saved');
+  };
+  (function () { var t = MBInvLog.localToday(); $('recDate').value = t; $('recDate').max = t; $('recDate').min = MBInvLog.addDays(t, -MBInvLog.LATE_DAYS); })();
+  $('calLink').href = 'calendar.html?date=' + MBInvLog.localToday();
+
+  /* ---------- daily table (same layout as the calendar) ---------- */
+  var dlAll = false;
+  function paintDaily() {
+    var d = $('dlDate').value || MBInvLog.localToday(), rows = MBInvLog.range(d, d)[d];
+    var shown = rows.filter(function (r) { return dlAll || r.used > 0 || r.added > 0; });
+    var h = '<thead><tr><th>Item</th><th>Beg</th><th>Added</th><th>Used</th><th>End</th><th>Units</th></tr></thead><tbody>', last = null;
+    shown.forEach(function (r) {
+      var g = r.item.group || 'Other'; if (g !== last) { h += '<tr class="g"><td colspan="6">' + esc(g) + '</td></tr>'; last = g; }
+      h += '<tr><td>' + esc(r.item.name) + '</td><td class="num">' + (r.beg == null ? '' : r.beg) + '</td><td class="num">' + (r.added || '') + '</td>' +
+        '<td class="num" title="Shift ' + r.auto + ' + manual ' + r.man + '">' + (r.used || '') + '</td><td class="num">' + (r.end == null ? '' : r.end) + '</td><td>' + esc(r.item.unit || '') + '</td></tr>';
+    });
+    if (!shown.length) h += '<tr><td colspan="6" style="text-align:left;color:var(--muted)">No stock changes on this day. Use "Show all items" to see every item.</td></tr>';
+    $('dlTable').innerHTML = h + '</tbody>';
+    $('dlAll').textContent = dlAll ? 'Hide unchanged' : 'Show all items';
+    $('dlCal').href = 'calendar.html?date=' + d;
+  }
+  $('dlDate').value = MBInvLog.localToday();
+  $('dlDate').onchange = paintDaily;
+  $('dlToday').onclick = function () { $('dlDate').value = MBInvLog.localToday(); paintDaily(); };
+  $('dlAll').onclick = function () { dlAll = !dlAll; paintDaily(); };
+  $('dlX').onclick = function () {
+    var d = $('dlDate').value || MBInvLog.localToday(), y = d.slice(0, 4), m = d.slice(5, 7);
+    MBInvLog.exportXlsx(y + '-' + m + '-01', y + '-' + m + '-' + (new Date(Date.UTC(+y, +m, 0)).getUTCDate()), d);
+  };
+
+  /* ---------- the sheet: OI | IN | TOTAL | OUT | CI ---------- */
+  var shSec = 'Bar', BYK = 'marinabays_invsheet_v1';
+  function secOf(it) { return String(it.group || 'Other').split(' \u00b7 ')[0]; }
+  function byAll() { try { return JSON.parse(localStorage.getItem(BYK)) || {}; } catch (e) { return {}; } }
+  function nv(x) { return x == null ? '' : x; }
+  function cellsHtml(r, live) {
+    var dis = live ? '' : ' disabled', tot = r.beg == null ? '' : r.beg + r.added;
+    function inp(f, v, ph) { return '<input data-f="' + f + '" type="number" inputmode="decimal" min="0" step="any" value="' + nv(v) + '" placeholder="' + (ph || '') + '"' + dis + '>'; }
+    return '<td>' + inp('oi', r.beg) + '</td><td>' + inp('in', r.added || '') + '</td><td class="tot">' + tot + '</td><td>' + inp('out', r.used || '') +
+      (r.auto ? '<small>orders ' + r.auto + '</small>' : '') + '</td><td class="ci">' + inp('ci', r.end) + '</td>';
+  }
+  function paintSheet() {
+    var d = $('shDate').value || MBInvLog.localToday(), live = d === MBInvLog.localToday(), rows = MBInvLog.range(d, d)[d], secs = [], h = '', lastG = null, q = $('shQ').value.trim().toLowerCase();
+    V.items.forEach(function (i) { var s = secOf(i); if (secs.indexOf(s) < 0) secs.push(s); });
+    if (secs.indexOf(shSec) < 0) shSec = secs[0] || 'Bar';
+    $('shChips').innerHTML = secs.map(function (s) { return '<button class="chip' + (s === shSec ? ' on' : '') + '" data-s="' + esc(s) + '">' + esc(s) + '</button>'; }).join('');
+    h = '<thead><tr><th>Item</th><th>OI</th><th>IN</th><th>TOTAL</th><th>OUT</th><th>CI</th></tr></thead><tbody>';
+    rows.forEach(function (r) {
+      if (secOf(r.item) !== shSec || (q && r.item.name.toLowerCase().indexOf(q) < 0)) return;
+      var g = r.item.group || 'Other'; if (g !== lastG) { lastG = g; if (g !== shSec) h += '<tr class="g"><td colspan="6">' + esc(g.split(' \u00b7 ').slice(1).join(' ')) + '</td></tr>'; }
+      h += '<tr data-id="' + esc(r.item.id) + '"' + (r.end === 0 ? ' class="zero"' : '') + '><td>' + esc(r.item.name) + (r.item.unit ? ' <span style="color:var(--muted);font-size:12px">(' + esc(r.item.unit) + ')</span>' : '') + '</td>' + cellsHtml(r, live) + '</tr>';
+    });
+    $('shTable').innerHTML = h + '</tbody>'; $('shBy').value = byAll()[d] || ''; $('shBy').disabled = !live;
+  }
+  $('shDate').value = MBInvLog.localToday(); $('shDate').max = MBInvLog.localToday();
+  $('shDate').onchange = paintSheet; $('shQ').oninput = paintSheet; $('shPrint').onclick = function () { window.print(); };
+  $('shBy').onchange = function () { var a = byAll(); a[$('shDate').value || MBInvLog.localToday()] = $('shBy').value.trim(); try { localStorage.setItem(BYK, JSON.stringify(a)); } catch (e) {} };
+  $('shChips').addEventListener('click', function (e) { var b = e.target.closest('button[data-s]'); if (b) { shSec = b.getAttribute('data-s'); paintSheet(); } });
+  $('shTable').addEventListener('change', function (e) {
+    var i = e.target, tr = i.closest('tr[data-id]'); if (!tr || !i.dataset.f) return;
+    var id = tr.dataset.id, f = i.dataset.f, raw = i.value.trim(), n = raw === '' ? (f === 'in' || f === 'out' ? 0 : NaN) : Number(raw);
+    if (isNaN(n) || n < 0) { D.toast('Enter a number'); }
+    else { var msg = MBInvLog.setDay(id, f, n); if (msg) D.toast(msg); }
+    var r = MBInvLog.range(MBInvLog.localToday(), MBInvLog.localToday())[MBInvLog.localToday()].filter(function (x) { return x.item.id === id; })[0];
+    var nxt = document.activeElement; tr.innerHTML = '<td>' + tr.firstChild.innerHTML + '</td>' + cellsHtml(r, true); tr.className = r.end === 0 ? 'zero' : '';
+    if (nxt && nxt.dataset && nxt.dataset.f) { var t = tr.querySelector('input[data-f="' + nxt.dataset.f + '"]'); if (t && nxt.closest('tr') === tr) t.focus(); }
+  });
+  $('shTable').addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' || !e.target.dataset.f) return; e.preventDefault(); e.target.blur();
+    var tr = e.target.closest('tr'), nx = tr.nextElementSibling; while (nx && !nx.dataset.id) nx = nx.nextElementSibling;
+    var t = nx && nx.querySelector('input[data-f="' + e.target.dataset.f + '"]'); if (t) t.focus();
+  });
+  $('shTable').addEventListener('focusin', function (e) { if (e.target.dataset.f) e.target.select(); });
+  function sheetOpen() { return $('v-sheet').classList.contains('on') && !(document.activeElement && document.activeElement.closest && document.activeElement.closest('#shTable')); }
+  window.addEventListener('focus', function () { if (sheetOpen()) { V = D.getInventory(); paintSheet(); } });
+  window.addEventListener('storage', function () { if (sheetOpen()) paintSheet(); });
+
+  function setView(v) {
+    ['sheet', 'stock', 'item', 'daily', 'data'].forEach(function (n) { $('v-' + n).classList.toggle('on', n === v); });
+    document.querySelectorAll('.tab').forEach(function (t) { t.classList.toggle('on', t.getAttribute('data-v') === (v === 'data' || v === 'daily' || v === 'sheet' ? v : 'stock')); });
+    $('stockTop').style.display = v === 'stock' ? '' : 'none';
+    $('addbar').style.display = v === 'stock' ? '' : 'none';
+    $('main').scrollTop = 0;
+    if (v === 'sheet') paintSheet();
+    if (v === 'stock') paintAll();
+    if (v === 'daily') paintDaily();
+    if (v === 'data') $('stat').textContent = V.items.length + ' items, ' + outCount() + ' out of stock';
+  }
+  document.querySelectorAll('.tab').forEach(function (t) { t.onclick = function () { setView(t.getAttribute('data-v')); }; });
+
+  /* ---------- data ---------- */
+  $('backup').onclick = function () { D.download('marina-bays-inventory-' + D.todayPH() + '.json', JSON.stringify(V)); D.toast('Backup saved'); };
+  $('restore').onclick = function () { $('file').click(); };
+  $('file').onchange = function (e) {
+    var f = e.target.files[0]; if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () {
+      try {
+        var data = JSON.parse(rd.result);
+        if (!data || !Array.isArray(data.items)) throw 0;
+        if (confirm('Replace the current list with this backup (' + data.items.length + ' items)?')) {
+          D.setInventory(data); if (window.MBInvLog) MBInvLog.clear(); V = D.getInventory(); filter = 'all'; setView('data'); D.toast('List restored');
+        }
+      } catch (err) { alert('That file is not an inventory backup.'); }
+      $('file').value = '';
+    };
+    rd.readAsText(f);
+  };
+  $('csv').onclick = function () {
+    function q(s) { return '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"'; }
+    var lines = ['Group,Item,Amount,Unit,Note,Last changed'];
+    V.items.forEach(function (i) { lines.push([q(i.group), q(i.name), i.qty === null || i.qty === undefined ? '' : i.qty, q(i.unit), q(i.note), i.updated || ''].join(',')); });
+    D.download('marina-bays-inventory.csv', lines.join('\n'), 'text/csv'); D.toast('CSV saved');
+  };
+  $('reset').onclick = function () {
+    if (confirm('Remove all changes on this device and go back to the starting list with every amount at zero?')) {
+      V = D.resetInventory(); if (window.MBInvLog) MBInvLog.clear(); filter = 'all'; setView('data'); D.toast('List reset');
+    }
+  };
+
+  setView('sheet');
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>

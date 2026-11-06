@@ -1,0 +1,107 @@
+/* Copyright (c) 2026 Marina Bay's Cafe. All rights reserved.
+   Brand look, loaded last on every page. Colors come from the logo: harbor teal for the wave, brass for the cup and sprig.
+   Change the colors here and every page follows. */
+:root {
+  --harbor: #0d3a4e;
+  --tide: #2a7f94;
+  --brass: #b08a57;
+  --ink: #14262e;
+  --muted: #52646c;
+  --line: #d3dcd9;
+  --soft: #f1f4f2;
+  --teal: #0d3a4e;
+  --brown: #b08a57;
+  --spend: #8a6a3d;
+  --serif: "Palatino Linotype", Palatino, "Book Antiqua", "Iowan Old Style", Georgia, serif;
+}
+
+/* ---- header: harbor band with a wave edge ---- */
+.top { position: relative; z-index: 6; margin-bottom: 9px; background: var(--harbor); color: #f6f2e8; border-bottom: none; }
+.top::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -8px; height: 8px; pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='8' viewBox='0 0 32 8'%3E%3Cpath d='M0 0H32V2C28 2 26 7 16 7S4 2 0 2Z' fill='%230d3a4e'/%3E%3C/svg%3E") repeat-x left top / 32px 8px;
+}
+.top img { width: 38px; height: 38px; padding: 3px; background: #fff; border-radius: 50%; box-shadow: 0 0 0 2px var(--brass); }
+.top b { font-family: var(--serif); font-size: 19px; font-weight: 700; letter-spacing: .01em; color: #fff; }
+.top span.sub { color: #a9c8d2; }
+.apps a { color: #b8d1d9; border-bottom-color: transparent; }
+.apps a.on { color: #fff; border-bottom-color: var(--brass); }
+.lock { background: transparent !important; color: #fff !important; border-color: rgba(255, 255, 255, .55) !important; border-radius: 10px !important; }
+
+body.pg-home .top { padding-top: calc(18px + env(safe-area-inset-top)); padding-bottom: 20px; }
+body.pg-home .top img { width: 48px; height: 48px; }
+body.pg-home .top b { font-size: 24px; }
+body.pg-home .top span.sub { font-family: var(--serif); font-style: italic; font-size: 14px; color: #d8c49d; }
+
+/* ---- type ---- */
+.sect, .exp-h, .day-h, .monthbar h2, .sh-head b, .editbar b { font-family: var(--serif); font-weight: 700; color: var(--harbor); }
+.sect { font-size: 17px; }
+.sh-head b { font-size: 20px; }
+h2.sec { font-family: var(--serif); font-size: 20px; color: var(--harbor); text-transform: none; letter-spacing: 0; margin-top: 24px; }
+.st b, .big, .card b { font-family: var(--serif); }
+.st b { font-size: 24px; }
+
+/* ---- buttons and fields ---- */
+.primary, .add-btn, .bigbtn { border-radius: 12px; background: var(--harbor); box-shadow: 0 8px 16px -10px rgba(13, 58, 78, .75); }
+.bigbtn { border-bottom: 3px solid var(--brass); font-family: var(--serif); font-size: 19px; letter-spacing: .02em; }
+.secondary, .shiftcard a, .links a { border-radius: 10px; border-color: var(--harbor); color: var(--harbor); }
+.small-btn, .stepper button, .searchbar input, .note-in, .catsel, .quick button { border-color: #c5d0d0; border-radius: 10px; }
+.seg, .seg2 { border-color: #c5d0d0; border-radius: 10px; }
+.seg button + button, .seg2 button + button { border-left-color: #c5d0d0; }
+.field { border-bottom-color: #c5d0d0; }
+.field:focus, .searchbar input:focus, .note-in:focus, .catsel:focus { border-color: var(--tide); border-bottom-color: var(--tide); }
+.step.minus { border-color: #c5d0d0; border-radius: 10px; }
+.step.plus { border-radius: 10px; }
+.chip { border-color: #c5d0d0; }
+:focus-visible { outline: 2px solid var(--tide); }
+
+/* ---- lists, tabs, sheets ---- */
+.prow:active, .entry:active, .icon-btn:active, .tile:active { background: #e8f0f1; }
+.badge { background: #f6efe2; color: #7d5a26; border-color: #e8d9bb; }
+.badge.best { background: #f6efe2; color: #7d5a26; border-color: #e8d9bb; }
+.tab.on { color: var(--harbor); border-top-color: var(--brass); }
+.sheet { border-radius: 20px 20px 0 0; box-shadow: 0 -8px 30px rgba(13, 40, 54, .22); }
+.shade { background: rgba(10, 36, 48, .55); }
+.cartbar, .totals { border-top: 2px solid var(--harbor); }
+.toast { background: var(--harbor); border-radius: 10px; }
+.totalrow { color: var(--harbor); }
+
+/* ---- home ---- */
+.shiftcard { border-radius: 14px; }
+.shiftcard.open { background: #e7f0f2; border-color: #a9c9d2; }
+.open .dot { background: #2f8f62; box-shadow: 0 0 0 4px rgba(47, 143, 98, .18); }
+.st { border-radius: 14px; border-color: #c3cfcc; background: var(--soft); }
+.st.good { background: var(--harbor); border-color: var(--harbor); }
+.st.good small { color: #a9c8d2; }
+.st.good b { color: #fff; }
+.tile { border-radius: 14px; border-color: #c3cfcc; }
+.tile svg { width: 42px; height: 42px; padding: 10px; border-radius: 12px; background: #e7f0f2; stroke: var(--harbor); margin-bottom: 4px; }
+.tile b { font-family: var(--serif); font-size: 17px; color: var(--harbor); }
+.links svg { stroke: var(--tide); }
+
+/* ---- calendar and cards ---- */
+.card, .daycard { border-radius: 12px; }
+.cell.sel { background: #e7f0f2; box-shadow: inset 0 0 0 2px var(--harbor); }
+.cell.today .d { background: var(--harbor); }
+.cell .a, .legend .t, .card.good b, .st.good b { color: var(--harbor); }
+.st.good b { color: #fff; }
+
+/* ---- POS menu ---- */
+body.pg-pos #items .prow b { color: var(--harbor); }
+body.pg-pos .pos-right { background: #fbfcfb; }
+.catnote { font-family: var(--serif); font-style: italic; color: var(--spend); }
+
+/* ---- wide screens: the app sits on the harbor ---- */
+@media (max-width: 480px) {
+  .top { gap: 8px; }
+  .top b { font-size: 17px; white-space: nowrap; }
+  .apps a { padding: 8px 6px; font-size: 13px; white-space: nowrap; }
+  body.pg-home .top b { font-size: 22px; }
+}
+@media (min-width: 768px) {
+  body.pg-pos #items .prow, body.pg-pos #items .prow:last-child { border-radius: 12px; border-color: #c3cfcc; background: #fff; }
+  body.pg-pos #items .prow:active { border-color: var(--harbor); background: #e8f0f1; }
+  body { background: linear-gradient(rgba(6, 30, 42, .22), rgba(6, 30, 42, .22)), url(icons/sea.jpg) center / cover no-repeat fixed, #0d3a4e; }
+  body .app { border: none; box-shadow: 0 0 0 2px rgba(255, 255, 255, .55), 0 20px 60px rgba(4, 22, 32, .55); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

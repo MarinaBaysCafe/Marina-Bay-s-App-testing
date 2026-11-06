@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<!-- Copyright (c) 2026 Marina Bay's Cafe. All rights reserved. -->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="security.js"></script>
+<script src="firebase-config.js"></script>
+<script src="cloud.js" data-uses=""></script>
+<meta name="robots" content="noindex, nofollow">
+<meta name="author" content="Marina Bay's Cafe">
+<meta name="copyright" content="Copyright 2026 Marina Bay's Cafe. All rights reserved.">
+<title>Sync | Marina Bay's Cafe</title>
+<meta name="theme-color" content="#0d3a4e">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/counter-apple-touch-icon.png">
+<link rel="stylesheet" href="app.css">
+<style>
+  .state { margin: 14px 16px 4px; padding: 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--soft); }
+  .state b { display: block; font-size: 17px; }
+  .state span { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .state.bad b { color: var(--bad); }
+  .msg { padding: 10px 16px; font-size: 14px; color: var(--bad); min-height: 20px; }
+  .about { padding: 4px 16px 24px; font-size: 13px; color: var(--muted); }
+  .about p { margin: 0 0 8px; }
+</style>
+<link rel="stylesheet" href="wide.css">
+<link rel="stylesheet" href="brand.css">
+</head>
+<body class="pg-narrow">
+<div class="app">
+  <div class="top">
+    <a href="index.html" aria-label="Home" style="display:flex"><img src="icons/logo-64.png" alt=""></a>
+    <div><b>Marina Bay's Cafe</b><span class="sub">Sync</span></div>
+    <nav class="apps" aria-label="Apps"><a href="index.html">All apps</a></nav>
+  </div>
+
+  <main id="main">
+    <div class="state" id="state"><b id="sTitle">Checking...</b><span id="sSub"></span></div>
+
+    <!-- signed out -->
+    <section id="out" hidden>
+      <div class="sect">Sign in</div>
+      <div class="msg" id="msg"></div>
+      <div class="actions"><button class="primary" id="signIn">Sign in with Google</button></div>
+    </section>
+
+    <!-- signed in -->
+    <section id="inn" hidden>
+      <div class="actions"><button class="primary" id="syncNow">Sync now</button><button class="secondary" id="signOut">Sign out</button></div>
+      <div class="sect">What is synced</div>
+      <div id="list"></div>
+      <div class="actions"><button class="text-btn danger" id="resync">Re-sync this phone from the cloud</button></div>
+    </section>
+
+    <div class="sect">How it works</div>
+    <div class="about">
+      <p>Every change is saved on the phone first, so the apps work without internet. When there is a connection, changes are copied to the cloud and the other phones get them.</p>
+      <p>Menu, inventory, daily inventory record, settings (payment methods, discounts, units), recipes, counted cash, and expenses are synced. Printer settings, the PIN, and the open order stay on each phone.</p>
+      <p>If two phones change the same item, the one saved last wins. When another phone changes something you are looking at, a bar at the top asks you to refresh.</p>
+    </div>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="app-data.js"></script>
+<script>
+(function () {
+  var C = window.MBCloud, D = window.MBData, $ = function (id) { return document.getElementById(id); };
+  var LABEL = { menu: 'Menu', inventory: 'Inventory', recipes: 'Recipes', counter: 'Money counter', expenses: 'Expenses', config: 'Settings', invlog: 'Daily inventory' };
+  function when(t) { return t ? new Date(t).toLocaleString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''; }
+
+  function paint() {
+    var s = C.status(), on = !!s.user;
+    $('out').hidden = on || !s.configured; $('inn').hidden = !on;
+    var box = $('state'), t, sub = '';
+    box.classList.remove('bad');
+    if (!s.configured) { t = 'Cloud sync is not set up'; sub = 'The Firebase settings file is missing.'; box.classList.add('bad'); }
+    else if (s.state === 'error' || s.state === 'offline') { t = s.state === 'offline' ? 'Offline' : 'Problem with sync'; sub = s.msg; box.classList.add('bad'); }
+    else if (!on) { t = s.state === 'connecting' ? 'Connecting...' : 'Not signed in'; sub = 'Sign in with your Google account.'; }
+    else if (s.state === 'synced') { t = 'Synced'; sub = (s.last ? 'Last sync ' + when(s.last) + '. ' : '') + 'Signed in as ' + s.user + '.'; }
+    else { t = 'Syncing...'; sub = 'Signed in as ' + s.user + '.'; }
+    $('sTitle').textContent = t; $('sSub').textContent = sub;
+    if (on) {
+      var p = C.pending(), h = '';
+      C.names.forEach(function (n) {
+        h += '<div class="prow" style="cursor:default"><div class="what"><b>' + LABEL[n] + '</b></div><div class="r">' +
+          (p[n] ? p[n] + ' waiting to upload' : 'All saved') + '</div></div>';
+      });
+      $('list').innerHTML = h;
+    }
+  }
+  C.onStatus(paint);
+  setInterval(paint, 4000);
+
+  $('signIn').onclick = async function () {
+    var b = $('signIn'); b.disabled = true; $('msg').textContent = '';
+    try { await C.signInGoogle(); }
+    catch (e) {
+      var c = (e && (e.code || e.message)) || String(e);
+      $('msg').textContent = /popup-closed-by-user|cancelled-popup-request/.test(c) ? ''
+        : /configuration-not-found/.test(c) ? 'Authentication is not started in Firebase yet. In the Firebase console, open Build, then Authentication, and tap Get started.'
+        : /operation-not-allowed/.test(c) ? 'Google sign-in is not turned on in Firebase. Open Authentication, then Sign-in method, and turn on Google.'
+        : /unauthorized-domain/.test(c) ? 'This web address is not allowed in Firebase. Open Authentication, then Settings, then Authorized domains, and add it.'
+        : /too-many-requests/.test(c) ? 'Too many tries. Wait a few minutes.'
+        : /network|unavailable|dynamically imported|Failed to fetch/i.test(c) ? 'Could not reach Firebase. Check the internet connection.'
+        : String(c);
+    }
+    b.disabled = false; paint();
+  };
+  $('signOut').onclick = async function () { await C.signOut(); paint(); D.toast('Signed out'); };
+  $('syncNow').onclick = function () { C.syncNow(); D.toast('Syncing'); setTimeout(paint, 1500); };
+  $('resync').onclick = function () {
+    if (confirm('Take the cloud version of every item that exists there? Items that only exist on this phone are kept and uploaded. Changes on this phone to items that are already in the cloud are replaced.')) {
+      C.resync(); D.toast('Re-syncing');
+    }
+  };
+
+  C.start().then(paint);
+  paint();
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>

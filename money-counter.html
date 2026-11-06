@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<!-- Copyright (c) 2026 Marina Bay's Cafe. All rights reserved. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="security.js"></script>
+<script src="firebase-config.js"></script>
+<script src="cloud.js" data-uses="counter,expenses"></script>
+<meta name="robots" content="noindex, nofollow">
+<meta name="author" content="Marina Bay's Cafe">
+<meta name="copyright" content="Copyright 2026 Marina Bay's Cafe. All rights reserved.">
+<title>Marina Bay's Cafe Money Counter</title>
+<meta name="theme-color" content="#0d3a4e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Money Counter">
+<link rel="manifest" href="manifest-money-counter.webmanifest">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/counter-apple-touch-icon.png">
+<style>
+  :root {
+    --ink: #1f1a17;
+    --muted: #7a7068;
+    --line: #e4dfd7;
+    --soft: #f5f2ec;
+    --teal: #0d3a4e;
+    --brown: #9b7952;
+    --bad: #a4372b;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: var(--soft);
+    font-size: 16px;
+    line-height: 1.35;
+  }
+  .app {
+    max-width: 480px; margin: 0 auto; height: 100%;
+    display: flex; flex-direction: column;
+    background: #fff;
+    border-left: 1px solid var(--line); border-right: 1px solid var(--line);
+  }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* top bar */
+  .top {
+    display: flex; align-items: center; gap: 10px;
+    padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  .top img { width: 32px; height: 32px; }
+  .top b { font-size: 16px; font-weight: 650; }
+  .top span.sub { display: block; font-size: 12px; color: var(--muted); }
+  .top { padding-right: 12px; }
+  .apps { margin-left: auto; display: flex; gap: 2px; }
+  .apps a { padding: 8px 10px; font-size: 14px; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; }
+  .apps a.on { color: var(--ink); font-weight: 650; border-bottom-color: var(--teal); }
+
+  .exp-sum { padding: 4px 16px 0; }
+  .exp-sum .ln { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+  .exp-sum .ln span:first-child { color: var(--muted); }
+  .exp-sum .ln.strong { font-weight: 650; }
+  .exp-sum .ln.strong span:first-child { color: var(--ink); }
+  .top span.sub { text-align: left; margin-left: 0; font-size: 12px; min-width: 0; }
+  .exp-block { padding: 0 0 4px; border-top: 6px solid var(--soft); margin-top: 10px; }
+  .exp-h { padding: 12px 16px 4px; font-weight: 650; }
+  .exp-item { display: flex; justify-content: space-between; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--line); font-size: 15px; }
+  .exp-item small { display: block; font-size: 12px; color: var(--muted); }
+  .exp-none { padding: 4px 16px 10px; font-size: 14px; color: var(--muted); }
+  .exp-block .exp-sum { padding-top: 0; }
+  .exp-link { display: inline-block; margin: 12px 16px 0; font-size: 14px; color: var(--teal); }
+
+  /* views */
+  main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .view { display: none; }
+  .view.on { display: block; }
+
+  /* day switcher */
+  .daynav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 8px 10px 16px; border-bottom: 1px solid var(--line);
+  }
+  .daynav .when { font-size: 17px; font-weight: 650; }
+  .daynav .when small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+  .arrows { display: flex; gap: 2px; }
+  .icon-btn {
+    width: 44px; height: 44px; border: none; background: none; color: var(--ink);
+    font-size: 24px; cursor: pointer; border-radius: 6px;
+  }
+  .icon-btn:active { background: var(--soft); }
+
+  /* denomination rows */
+  .row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 16px; height: 60px; border-bottom: 1px solid var(--line);
+  }
+  .denom { width: 72px; font-size: 18px; font-weight: 650; }
+  .ctrl { display: flex; align-items: center; gap: 6px; }
+  .step {
+    width: 42px; height: 42px; border-radius: 6px; font-size: 22px; line-height: 1;
+    cursor: pointer; font-family: inherit;
+  }
+  .step.minus { background: #fff; color: var(--ink); border: 1.5px solid #c9c1b5; }
+  .step.plus { background: var(--teal); color: #fff; border: 1.5px solid var(--teal); }
+  .step:active { opacity: .75; }
+  .qty {
+    width: 52px; height: 42px; text-align: center; font: inherit; font-size: 18px; font-weight: 600;
+    border: none; border-bottom: 1.5px solid #c9c1b5; border-radius: 0; background: none; color: var(--ink);
+    -moz-appearance: textfield;
+  }
+  .qty::-webkit-outer-spin-button, .qty::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .qty:focus { outline: none; border-bottom-color: var(--teal); }
+  .sub { margin-left: auto; font-size: 16px; text-align: right; }
+  .sub.zero { color: #b5ada3; }
+
+  .online-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 16px; background: var(--soft); border-bottom: 1px solid var(--line);
+  }
+  .online-row label { font-weight: 650; }
+  .money-input { display: flex; align-items: center; gap: 6px; border-bottom: 1.5px solid #c9c1b5; padding-bottom: 2px; }
+  .money-input:focus-within { border-bottom-color: var(--teal); }
+  .money-input input {
+    width: 130px; border: none; background: none; font: inherit; font-size: 18px; font-weight: 600;
+    text-align: right; color: var(--ink); padding: 6px 0; -moz-appearance: textfield;
+  }
+  .money-input input:focus { outline: none; }
+  .money-input input::-webkit-outer-spin-button, .money-input input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+  .link-btn {
+    display: block; margin: 16px; padding: 0; border: none; background: none;
+    font: inherit; font-size: 14px; color: var(--bad); cursor: pointer; text-decoration: underline;
+  }
+
+  /* totals bar */
+  .totals {
+    display: grid; grid-template-columns: 1fr 1fr 1.2fr;
+    border-top: 2px solid var(--ink); background: #fff;
+  }
+  .totals div { padding: 8px 12px 9px; border-right: 1px solid var(--line); }
+  .totals div:last-child { border-right: none; background: var(--teal); color: #fff; }
+  .totals small { display: block; font-size: 11px; color: var(--muted); }
+  .totals div:last-child small { color: #cfdde4; }
+  .totals b { font-size: 17px; font-weight: 700; }
+
+  /* tabs */
+  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); background: #fff; }
+  .tab {
+    border: none; background: none; font: inherit; font-size: 14px; color: var(--muted);
+    padding: 13px 0 12px; cursor: pointer; border-top: 3px solid transparent; margin-top: -1px;
+  }
+  .tab.on { color: var(--teal); font-weight: 650; border-top-color: var(--teal); }
+
+  /* calendar */
+  .monthbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 8px 16px; }
+  .monthbar h2 { margin: 0; font-size: 18px; font-weight: 650; }
+  .monthsum { padding: 0 16px 12px; font-size: 14px; color: var(--muted); border-bottom: 1px solid var(--line); }
+  .monthsum b { color: var(--ink); }
+  .dow, .days { display: grid; grid-template-columns: repeat(7, 1fr); }
+  .dow div { text-align: center; font-size: 12px; color: var(--muted); padding: 8px 0 6px; }
+  .days { border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin: 0 16px 16px; }
+  .cell {
+    min-height: 58px; border: none; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    background: #fff; font: inherit; font-size: 14px; color: var(--ink);
+    padding: 5px 4px; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 2px;
+  }
+  .cell.blank { background: var(--soft); cursor: default; }
+  .cell small { font-size: 10px; color: var(--teal); font-weight: 650; word-break: break-all; line-height: 1.15; }
+  .cell.today .d { display: inline-block; width: 22px; height: 22px; line-height: 22px; text-align: center; border-radius: 50%; background: var(--ink); color: #fff; font-size: 13px; }
+  .cell.sel { background: #e9f0f3; }
+  .hint { padding: 0 16px 16px; font-size: 13px; color: var(--muted); }
+
+  /* more */
+  .list { padding: 8px 0; }
+  .item { display: block; width: 100%; text-align: left; padding: 14px 16px; border: none; border-bottom: 1px solid var(--line); background: #fff; font: inherit; cursor: pointer; color: var(--ink); }
+  .item b { display: block; font-weight: 650; }
+  .item span { font-size: 13px; color: var(--muted); }
+  .item:active { background: var(--soft); }
+  .note { padding: 14px 16px; font-size: 13px; color: var(--muted); }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 130px; transform: translateX(-50%);
+    background: var(--ink); color: #fff; padding: 8px 14px; border-radius: 6px; font-size: 13px;
+    opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  .toast.on { opacity: 1; }
+  :focus-visible { outline: 2px solid var(--brown); outline-offset: 1px; }
+  @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+</style>
+<link rel="stylesheet" href="wide.css">
+<link rel="stylesheet" href="brand.css">
+</head>
+<body class="pg-counter">
+<div class="app">
+  <div class="top">
+    <a href="index.html" aria-label="Home" style="display:flex"><img src="icons/logo-64.png" alt=""></a>
+    <div><b>Marina Bay's Cafe</b><span class="sub">Money counter</span></div>
+    <nav class="apps" aria-label="Apps"><a href="analytics.html">Analytics</a><a href="index.html">All apps</a></nav>
+  </div>
+
+  <main id="main">
+    <!-- COUNT -->
+    <section class="view on" id="v-count">
+      <div class="daynav">
+        <div class="when" id="when"></div>
+        <div class="arrows">
+          <button class="icon-btn" id="prevDay" aria-label="Previous day">&#8249;</button>
+          <button class="icon-btn" id="nextDay" aria-label="Next day">&#8250;</button>
+        </div>
+      </div>
+      <div id="rows"></div>
+      <div class="online-row">
+        <label for="online">Online payment</label>
+        <div class="money-input"><span>₱</span><input id="online" class="num" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00"></div>
+      </div>
+      <div class="exp-block" id="expBlock">
+        <div class="exp-h">Expenses</div>
+        <div id="expList"></div>
+        <div class="exp-sum" id="expSum">
+          <div class="ln"><span>Paid in cash</span><span class="num" id="expCash">₱0.00</span></div>
+          <div class="ln"><span>Paid online</span><span class="num" id="expOnline">₱0.00</span></div>
+          <div class="ln strong"><span>Cash after expenses</span><span class="num" id="cashAfter">₱0.00</span></div>
+        </div>
+      </div>
+      <button class="mb-print" id="printBtn">Print receipt</button>
+      <a class="exp-link" href="expenses.html">Add or view expenses for this day</a>
+      <a class="exp-link" href="shift.html">End shift and print the shift report</a>
+      <a class="exp-link" id="calLink" href="calendar.html">See this day in the calendar</a>
+      <button class="link-btn" id="clear">Clear this day</button>
+    </section>
+
+    <!-- CALENDAR -->
+    <section class="view" id="v-cal">
+      <div class="monthbar">
+        <h2 id="monthTitle"></h2>
+        <div class="arrows">
+          <button class="icon-btn" id="prevM" aria-label="Previous month">&#8249;</button>
+          <button class="icon-btn" id="nextM" aria-label="Next month">&#8250;</button>
+        </div>
+      </div>
+      <div class="monthsum" id="monthSum"></div>
+      <div class="dow"><div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div></div>
+      <div class="days" id="days"></div>
+      <div class="hint">Tap a day to open it. The amount on each day is the total money.</div>
+    </section>
+
+    <!-- MORE -->
+    <section class="view" id="v-more">
+      <div class="list">
+        <button class="item" id="exportCsv"><b>Export to spreadsheet (CSV)</b><span>All days, one row per day</span></button>
+        <button class="item" id="backup"><b>Save a backup</b><span>Downloads a file with all your records</span></button>
+        <button class="item" id="restore"><b>Restore from a backup</b><span>Load a backup file saved earlier</span></button>
+        <input type="file" id="file" accept=".json,application/json" hidden>
+      </div>
+      <div id="printerBox"></div>
+      <p class="note">Records are saved on this phone only. Save a backup once in a while, especially before clearing browser data or changing phones.</p>
+    </section>
+  </main>
+
+  <div class="totals" id="totals">
+    <div><small>Cash on hand</small><b class="num" id="cashTotal">₱0.00</b></div>
+    <div><small>Online</small><b class="num" id="onlineTotal">₱0.00</b></div>
+    <div><small>Total money</small><b class="num" id="grandTotal">₱0.00</b></div>
+  </div>
+
+  <nav class="tabs">
+    <button class="tab on" data-v="count">Count</button>
+    <button class="tab" data-v="cal">Calendar</button>
+    <button class="tab" data-v="more">More</button>
+  </nav>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="receipt-logo.js"></script>
+<script src="printer.js"></script>
+<script>
+(function () {
+  var DENOMS = [1000, 500, 200, 100, 50, 20, 10, 5, 1];
+  var KEY = 'marinabays_money_v1';
+  var TZ = 'Asia/Manila';
+  var MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var $ = function (id) { return document.getElementById(id); };
+
+  function peso(n) {
+    return '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function pesoShort(n) {
+    return '₱' + Number(n).toLocaleString('en-PH', { maximumFractionDigits: 0 });
+  }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function todayPH() {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  }
+  function toUTC(key) { var p = key.split('-'); return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])); }
+  function fromUTC(d) { return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); }
+  function shiftDay(key, n) { var d = toUTC(key); d.setUTCDate(d.getUTCDate() + n); return fromUTC(d); }
+
+  var store = {};
+  try { store = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { store = {}; }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { toast('Could not save. Storage may be full.'); } }
+  function getDay(k) { if (!store[k]) store[k] = { counts: {}, online: 0 }; return store[k]; }
+  function cashOf(r) { var t = 0; DENOMS.forEach(function (d) { t += d * (r.counts[d] || 0); }); return t; }
+  function totalOf(r) { return cashOf(r) + (Number(r.online) || 0); }
+
+  var toastTimer;
+  function toast(msg) {
+    var t = $('toast'); t.textContent = msg; t.classList.add('on');
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.classList.remove('on'); }, 1800);
+  }
+
+  var today = todayPH(), selected = today;
+  var qd = /[?&]date=(\d{4}-\d{2}-\d{2})/.exec(location.search);  // opened from the Calendar
+  if (qd) selected = qd[1];
+  var viewY = +selected.slice(0, 4), viewM = +selected.slice(5, 7) - 1;
+
+  /* ---------- counter ---------- */
+  var rowsEl = $('rows');
+  DENOMS.forEach(function (d) {
+    var r = document.createElement('div');
+    r.className = 'row';
+    r.innerHTML =
+      '<div class="denom num">₱' + d.toLocaleString('en-PH') + '</div>' +
+      '<div class="ctrl">' +
+        '<button class="step minus" data-d="' + d + '" data-s="-1" aria-label="Remove one ' + d + ' peso bill or coin">&minus;</button>' +
+        '<input class="qty num" type="number" inputmode="numeric" min="0" step="1" data-d="' + d + '" aria-label="How many ' + d + '">' +
+        '<button class="step plus" data-d="' + d + '" data-s="1" aria-label="Add one ' + d + ' peso bill or coin">+</button>' +
+      '</div>' +
+      '<div class="sub num zero" id="sub' + d + '">₱0.00</div>';
+    rowsEl.appendChild(r);
+  });
+
+  rowsEl.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-d]'); if (!b) return;
+    var d = b.getAttribute('data-d'), rec = getDay(selected);
+    rec.counts[d] = Math.max(0, (rec.counts[d] || 0) + (+b.getAttribute('data-s')));
+    save(); paintDay();
+  });
+  rowsEl.addEventListener('input', function (e) {
+    var i = e.target.closest('input[data-d]'); if (!i) return;
+    getDay(selected).counts[i.getAttribute('data-d')] = Math.max(0, Math.floor(+i.value) || 0);
+    save(); paintTotals();
+  });
+  rowsEl.addEventListener('focusin', function (e) { if (e.target.classList.contains('qty')) e.target.select(); });
+  $('online').addEventListener('input', function (e) {
+    getDay(selected).online = Math.max(0, +e.target.value || 0);
+    save(); paintTotals();
+  });
+  $('online').addEventListener('focus', function (e) { e.target.select(); });
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function expensesOf(k) {
+    var out = { cash: 0, online: 0, list: [] };
+    try {
+      var s = JSON.parse(localStorage.getItem('marinabays_expenses_v1')) || {};
+      ((s.days || {})[k] || []).forEach(function (x) { out[x.src === 'online' ? 'online' : 'cash'] += x.amt || 0; out.list.push(x); });
+    } catch (e) {}
+    return out;
+  }
+  function paintTotals() {
+    var rec = getDay(selected);
+    var ex = expensesOf(selected);
+    $('expCash').textContent = peso(ex.cash);
+    $('expOnline').textContent = peso(ex.online);
+    $('cashAfter').textContent = peso(cashOf(rec) - ex.cash);
+    $('expList').innerHTML = ex.list.length ? ex.list.map(function (x) {
+      return '<div class="exp-item"><div>' + esc(x.cat) + '<small>' + (x.src === 'online' ? 'Online' : 'Cash') + (x.note ? ' · ' + esc(x.note) : '') + '</small></div><span class="num">' + peso(x.amt) + '</span></div>';
+    }).join('') : '<div class="exp-none">No expenses for this day.</div>';
+    DENOMS.forEach(function (d) {
+      var v = d * (rec.counts[d] || 0), el = $('sub' + d);
+      el.textContent = peso(v); el.classList.toggle('zero', v === 0);
+    });
+    $('cashTotal').textContent = peso(cashOf(rec));
+    $('onlineTotal').textContent = peso(Number(rec.online) || 0);
+    $('grandTotal').textContent = peso(totalOf(rec));
+  }
+  function paintDay() {
+    var cl = $('calLink'); if (cl) cl.href = 'calendar.html?date=' + selected;
+    var rec = getDay(selected);
+    rowsEl.querySelectorAll('input.qty').forEach(function (i) { i.value = rec.counts[i.getAttribute('data-d')] || 0; });
+    $('online').value = rec.online ? rec.online : '';
+    var dt = toUTC(selected);
+    $('when').innerHTML = dt.toLocaleDateString('en-PH', { timeZone: 'UTC', weekday: 'long', month: 'long', day: 'numeric' }) +
+      '<small>' + dt.getUTCFullYear() + (selected === today ? ', today' : '') + '</small>';
+    paintTotals();
+  }
+  // empty days should not clutter storage
+  function dropIfEmpty(k) { if (store[k] && totalOf(store[k]) === 0) delete store[k]; }
+  function goDay(k) { dropIfEmpty(selected); selected = k; save(); paintDay(); }
+  $('prevDay').onclick = function () { goDay(shiftDay(selected, -1)); };
+  $('nextDay').onclick = function () { goDay(shiftDay(selected, 1)); };
+  $('when').onclick = function () { if (selected !== today) goDay(today); };
+  $('clear').onclick = function () {
+    if (confirm('Clear all counts for this day?')) { delete store[selected]; save(); paintDay(); toast('Day cleared'); }
+  };
+
+  /* ---------- calendar ---------- */
+  function paintCal() {
+    $('monthTitle').textContent = MONTHS[viewM] + ' ' + viewY;
+    var first = new Date(Date.UTC(viewY, viewM, 1)).getUTCDay();
+    var count = new Date(Date.UTC(viewY, viewM + 1, 0)).getUTCDate();
+    var html = '', sum = 0, days = 0;
+    for (var i = 0; i < first; i++) html += '<div class="cell blank"></div>';
+    for (var d = 1; d <= count; d++) {
+      var key = viewY + '-' + pad(viewM + 1) + '-' + pad(d);
+      var rec = store[key], tot = rec ? totalOf(rec) : 0;
+      if (tot > 0) { sum += tot; days++; }
+      html += '<button class="cell' + (key === today ? ' today' : '') + (key === selected ? ' sel' : '') + '" data-k="' + key + '">' +
+        '<span class="d num">' + d + '</span>' + (tot > 0 ? '<small class="num">' + pesoShort(tot) + '</small>' : '') + '</button>';
+    }
+    var tail = (7 - ((first + count) % 7)) % 7;
+    for (var j = 0; j < tail; j++) html += '<div class="cell blank"></div>';
+    $('days').innerHTML = html;
+    $('monthSum').innerHTML = days
+      ? 'Month total <b class="num">' + peso(sum) + '</b> over ' + days + (days === 1 ? ' day' : ' days')
+      : 'No records this month';
+  }
+  $('days').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-k]'); if (!b) return;
+    goDay(b.getAttribute('data-k')); show('count');
+  });
+  $('prevM').onclick = function () { viewM--; if (viewM < 0) { viewM = 11; viewY--; } paintCal(); };
+  $('nextM').onclick = function () { viewM++; if (viewM > 11) { viewM = 0; viewY++; } paintCal(); };
+
+  /* ---------- tabs ---------- */
+  function show(v) {
+    document.querySelectorAll('.view').forEach(function (s) { s.classList.toggle('on', s.id === 'v-' + v); });
+    document.querySelectorAll('.tab').forEach(function (t) { t.classList.toggle('on', t.getAttribute('data-v') === v); });
+    $('totals').style.display = v === 'count' ? '' : 'none';
+    if (v === 'cal') {
+      var s = selected; viewY = +s.slice(0, 4); viewM = +s.slice(5, 7) - 1; paintCal();
+    }
+    $('main').scrollTop = 0;
+  }
+  document.querySelectorAll('.tab').forEach(function (t) {
+    t.onclick = function () { show(t.getAttribute('data-v')); };
+  });
+
+  /* ---------- backup and export ---------- */
+  function download(name, text, type) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: type }));
+    a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  $('backup').onclick = function () {
+    dropIfEmpty(selected);
+    download('marina-bays-backup-' + todayPH() + '.json', JSON.stringify(store), 'application/json');
+    toast('Backup saved');
+  };
+  $('exportCsv').onclick = function () {
+    var head = ['Date'].concat(DENOMS.map(function (d) { return 'P' + d + ' count'; }), ['Cash', 'Online', 'Total']);
+    var lines = [head.join(',')];
+    Object.keys(store).sort().forEach(function (k) {
+      var r = store[k]; if (totalOf(r) === 0) return;
+      lines.push([k].concat(DENOMS.map(function (d) { return r.counts[d] || 0; }), [cashOf(r), Number(r.online) || 0, totalOf(r)]).join(','));
+    });
+    download('marina-bays-money.csv', lines.join('\n'), 'text/csv');
+    toast('CSV saved');
+  };
+  $('restore').onclick = function () { $('file').click(); };
+  $('file').onchange = function (e) {
+    var f = e.target.files[0]; if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () {
+      try {
+        var data = JSON.parse(rd.result);
+        if (typeof data !== 'object' || Array.isArray(data)) throw 0;
+        var n = Object.keys(data).length;
+        if (confirm('Load ' + n + ' days from this backup? Days with the same date will be replaced.')) {
+          Object.keys(data).forEach(function (k) {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(k) && data[k] && data[k].counts) store[k] = data[k];
+          });
+          save(); paintDay(); toast('Backup loaded');
+        }
+      } catch (err) { alert('That file is not a valid backup.'); }
+      $('file').value = '';
+    };
+    rd.readAsText(f);
+  };
+
+  /* ---------- receipt ---------- */
+  function num(n) { return Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function receipt(p) {
+    var rec = getDay(selected), ex = expensesOf(selected), cash = cashOf(rec), online = Number(rec.online) || 0;
+    p.header('Daily cash count', toUTC(selected).toLocaleDateString('en-PH', { timeZone: 'UTC', weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }));
+    DENOMS.forEach(function (d) {
+      var c = rec.counts[d] || 0;
+      if (c) p.row(d + ' x ' + c, num(d * c));
+    });
+    p.rule();
+    p.row('Cash on hand', num(cash));
+    p.row('Online payment', num(online));
+    p.row('TOTAL MONEY', num(cash + online), { b: true });
+    if (ex.list.length) {
+      p.rule(); p.center('Expenses'); p.rule();
+      ex.list.forEach(function (x) {
+        p.row(x.cat, num(x.amt));
+        p.text('  ' + (x.src === 'online' ? 'Online' : 'Cash') + (x.note ? ' - ' + x.note : ''), { indent: '    ' });
+      });
+      p.row('Paid in cash', num(ex.cash));
+      p.row('Paid online', num(ex.online));
+      p.rule();
+      p.row('CASH AFTER EXPENSES', num(cash - ex.cash), { b: true });
+    }
+    p.footer();
+  }
+  var pb = $('printBtn');
+  pb.onclick = async function () {
+    var old = pb.textContent; pb.disabled = true; pb.textContent = 'Printing...';
+    try {
+      var m = await MBPrinter.print('counter', receipt);
+      if (m) toast(m);
+    } finally { pb.disabled = false; pb.textContent = old; }
+  };
+  MBPrinter.mount($('printerBox'));
+
+  paintDay();
+  window.addEventListener('pageshow', paintTotals);
+  window.addEventListener('focus', paintTotals);
+
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>

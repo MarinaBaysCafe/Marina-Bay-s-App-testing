@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<!-- Copyright (c) 2026 Marina Bay's Cafe. All rights reserved. -->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="security.js"></script>
+<script src="firebase-config.js"></script>
+<script src="cloud.js" data-uses=""></script>
+<meta name="robots" content="noindex, nofollow">
+<meta name="author" content="Marina Bay's Cafe">
+<meta name="copyright" content="Copyright 2026 Marina Bay's Cafe. All rights reserved.">
+<title>Backup and reset | Marina Bay's Cafe</title>
+<meta name="theme-color" content="#0d3a4e">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/counter-apple-touch-icon.png">
+<link rel="stylesheet" href="app.css">
+<style>
+  .stat { display: flex; justify-content: space-between; gap: 12px; padding: 9px 16px; border-top: 1px solid var(--line); font-size: 15px; }
+  .stat span:last-child { color: var(--muted); }
+  .warn { margin: 0; padding: 12px 16px; font-size: 13px; color: var(--bad); background: #fbeceb; border-top: 1px solid #efc9c5; border-bottom: 1px solid #efc9c5; }
+  .danger-btn { flex: 1; height: 46px; border: none; border-radius: 6px; background: var(--bad); color: #fff; font: inherit; font-weight: 650; font-size: 16px; cursor: pointer; }
+  .danger-btn:disabled { opacity: .4; }
+</style>
+<link rel="stylesheet" href="wide.css">
+<link rel="stylesheet" href="brand.css">
+</head>
+<body class="pg-narrow">
+<div class="app">
+  <div class="top">
+    <a href="index.html" aria-label="Home" style="display:flex"><img src="icons/logo-64.png" alt=""></a>
+    <div><b>Marina Bay's Cafe</b><span class="sub">Backup and reset</span></div>
+    <nav class="apps" aria-label="Apps"><a href="index.html">All apps</a></nav>
+  </div>
+
+  <main id="main">
+    <div class="sect">What is saved on this device</div>
+    <div id="stats"></div>
+
+    <div class="sect">Backup</div>
+    <button class="prow" id="backup"><div class="what"><b>Save a backup of everything</b><span class="s">Menu, inventory, recipes, sales, shifts, counts, and expenses in one file</span></div><i>&#8250;</i></button>
+    <button class="prow" id="restore"><div class="what"><b>Restore from a backup</b><span class="s">Replaces the data on this device with a saved backup file</span></div><i>&#8250;</i></button>
+    <input type="file" id="file" accept=".json,application/json" hidden>
+
+    <div class="sect">Start fresh</div>
+    <p class="sub-note">Choose what to set back to zero. The menu items and recipes are kept unless you tick them.</p>
+    <label class="check"><input type="checkbox" id="rSales" checked> Sales and shifts (shift numbers start again at 1)</label>
+    <label class="check"><input type="checkbox" id="rCounter" checked> Money counter counts</label>
+    <label class="check"><input type="checkbox" id="rExp" checked> Expenses</label>
+    <label class="check"><input type="checkbox" id="rInv" checked> Inventory amounts (every item goes to 0)</label>
+    <label class="check"><input type="checkbox" id="rRec"> Recipes (deletes all of them)</label>
+    <label class="check"><input type="checkbox" id="rMenu"> Menu (back to the starting menu and prices)</label>
+    <p class="warn" id="syncWarn" hidden>You are signed in to cloud sync. Resetting here also clears the same data on every other device.</p>
+    <div class="frow"><label for="confirmText">Type RESET to confirm</label><input class="field" id="confirmText" type="text" autocomplete="off" autocapitalize="characters" placeholder="RESET"></div>
+    <div class="actions"><button class="danger-btn" id="resetBtn" disabled>Set to zero</button></div>
+    <div style="height:24px"></div>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="menu-default.js"></script>
+<script src="inventory-default.js"></script>
+<script src="app-data.js"></script>
+<script src="shift-lib.js"></script>
+<script>
+(function () {
+  var D = window.MBData, S = window.MBShift, $ = function (id) { return document.getElementById(id); };
+  var KEYS = { menu: 'marinabays_menu_v1', inventory: 'marinabays_inventory_v1', recipes: 'marinabays_recipes_v1', counter: 'marinabays_money_v1',
+               expenses: 'marinabays_expenses_v1', sales: 'marinabays_sales_v1', shifts: 'marinabays_shifts_v1', config: 'marinabays_config_v1', invlog: 'marinabays_invlog_v2' };
+
+  function paintStats() {
+    var inv = D.getInventory().items, m = D.getMenu(), idx = S.index(), days = Object.keys(idx).length;
+    var rows = [
+      ['Menu', m.items.length + ' items in ' + m.categories.length + ' sections'],
+      ['Inventory', inv.length + ' items, ' + inv.filter(function (i) { return i.qty; }).length + ' with stock'],
+      ['Recipes', D.getRecipes().recipes.length + ''],
+      ['Sales', S.sales().length + ' orders'],
+      ['Shifts', S.shifts().hist.length + ' closed' + (S.current() ? ', 1 open' : '')],
+      ['Days with records', String(days)]
+    ];
+    $('stats').innerHTML = rows.map(function (r) { return '<div class="stat"><span>' + r[0] + '</span><span>' + r[1] + '</span></div>'; }).join('');
+    $('syncWarn').hidden = !(window.MBCloud && window.MBCloud.status().user);
+  }
+
+  /* ---------- backup ---------- */
+  $('backup').onclick = function () {
+    var out = { app: 'marinabays', version: 1, savedAt: new Date().toISOString(), data: {} };
+    Object.keys(KEYS).forEach(function (k) { try { out.data[k] = JSON.parse(localStorage.getItem(KEYS[k])); } catch (e) { out.data[k] = null; } });
+    D.download('marina-bays-backup-' + D.todayPH() + '.json', JSON.stringify(out)); D.toast('Backup saved');
+  };
+  $('restore').onclick = function () { $('file').click(); };
+  $('file').onchange = function (e) {
+    var f = e.target.files[0]; if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () {
+      try {
+        var b = JSON.parse(rd.result);
+        if (!b || b.app !== 'marinabays' || !b.data) throw 0;
+        if (confirm('Replace the data on this device with this backup (saved ' + String(b.savedAt || '').slice(0, 10) + ')?')) {
+          Object.keys(KEYS).forEach(function (k) { if (b.data[k] != null) localStorage.setItem(KEYS[k], JSON.stringify(b.data[k])); });
+          D.toast('Backup restored'); setTimeout(function () { location.reload(); }, 700);
+        }
+      } catch (err) { alert('That file is not a Marina Bay\'s backup.'); }
+      $('file').value = '';
+    };
+    rd.readAsText(f);
+  };
+
+  /* ---------- start fresh ---------- */
+  $('confirmText').addEventListener('input', function () { $('resetBtn').disabled = $('confirmText').value.trim().toUpperCase() !== 'RESET'; });
+  $('resetBtn').onclick = function () {
+    var did = [];
+    if ($('rSales').checked) {
+      localStorage.setItem(KEYS.sales, JSON.stringify({ sales: [] }));
+      localStorage.setItem(KEYS.shifts, JSON.stringify({ nextNo: 1, cur: null, hist: [] })); did.push('sales and shifts');
+    }
+    if ($('rCounter').checked) { localStorage.setItem(KEYS.counter, JSON.stringify({})); did.push('counts'); }
+    if ($('rExp').checked) {
+      var ex = {}; try { ex = JSON.parse(localStorage.getItem(KEYS.expenses)) || {}; } catch (e) {}
+      ex.days = {}; localStorage.setItem(KEYS.expenses, JSON.stringify(ex)); did.push('expenses');
+    }
+    if ($('rInv').checked) {
+      var inv = D.getInventory(); inv.items.forEach(function (i) { i.qty = 0; i.updated = ''; }); D.saveInventory(); localStorage.removeItem(KEYS.invlog); did.push('inventory');
+    }
+    if ($('rRec').checked) { D.setRecipes({ recipes: [] }); did.push('recipes'); }
+    if ($('rMenu').checked) { D.resetMenu(); did.push('menu'); }
+    try { sessionStorage.removeItem('marinabays_cart_v1'); localStorage.removeItem('marinabays_cart_v1'); } catch (e) {}
+    $('confirmText').value = ''; $('resetBtn').disabled = true;
+    D.toast(did.length ? 'Set to zero: ' + did.join(', ') : 'Nothing was ticked');
+    setTimeout(function () { location.reload(); }, 900);
+  };
+
+  paintStats();
+  if (window.MBCloud) window.MBCloud.onStatus(paintStats);
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>

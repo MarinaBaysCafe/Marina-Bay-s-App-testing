@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<!-- Copyright (c) 2026 Marina Bay's Cafe. All rights reserved. -->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="security.js"></script>
+<script src="firebase-config.js"></script>
+<script src="cloud.js" data-uses="sales,shifts,expenses,counter,inventory,invlog"></script>
+<meta name="robots" content="noindex, nofollow">
+<meta name="author" content="Marina Bay's Cafe">
+<meta name="copyright" content="Copyright 2026 Marina Bay's Cafe. All rights reserved.">
+<title>Shift | Marina Bay's Cafe</title>
+<meta name="theme-color" content="#0d3a4e">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/counter-apple-touch-icon.png">
+<link rel="stylesheet" href="app.css">
+<style>
+  .tabs { grid-template-columns: repeat(4, 1fr); }
+  .state { margin: 14px 16px 6px; padding: 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--soft); }
+  .state b { display: block; font-size: 17px; }
+  .state span { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .state.open { border-color: #cfdde4; background: #eef3f5; }
+  .rrow { display: flex; justify-content: space-between; gap: 12px; padding: 9px 16px; border-top: 1px solid var(--line); font-size: 15px; }
+  .rrow.strong { font-weight: 650; }
+  .rrow span:first-child { min-width: 0; }
+  .rrow small { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }
+  .none { padding: 10px 16px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+  .pos { color: #2f6b4f; } .neg { color: var(--bad); }
+  .totalrow { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 16px; font-size: 17px; font-weight: 700; border-top: 1px solid var(--line); }
+  a.secondary { display: inline-flex; align-items: center; text-decoration: none; }
+  .msg { padding: 0 16px 8px; font-size: 14px; color: var(--muted); }
+  .mini { font-size: 13px; color: var(--muted); padding: 0 16px 10px; }
+</style>
+<link rel="stylesheet" href="brand.css">
+</head>
+<body class="pg-narrow">
+<div class="app">
+  <div class="top">
+    <a href="index.html" aria-label="Home" style="display:flex"><img src="icons/logo-64.png" alt=""></a>
+    <div><b>Marina Bay's Cafe</b><span class="sub">Shift</span></div>
+    <nav class="apps" aria-label="Apps"><a href="pos.html">POS</a><a href="analytics.html">Analytics</a><a href="index.html">All apps</a></nav>
+  </div>
+
+  <main id="main">
+    <section class="view on" id="v-shift"><div id="shiftBody"></div></section>
+    <section class="view" id="v-sales"><div id="salesBody"></div></section>
+    <section class="view" id="v-hist"><div id="histBody"></div></section>
+    <section class="view" id="v-detail">
+      <div class="editbar"><button class="icon-btn" id="back" aria-label="Back">&#8249;</button><b id="detailTitle">Shift report</b></div>
+      <div id="detailBody"></div>
+      <div class="actions"><button class="primary" id="detailPrint">Print report</button><button class="text-btn danger" id="detailDel">Delete shift</button></div>
+    </section>
+    <section class="view" id="v-more">
+      <div class="sect">This device</div>
+      <div class="frow"><label for="posName">POS name</label><input class="field" id="posName" type="text" maxlength="20" autocomplete="off"></div>
+      <p class="help">The name printed as "POS" on the shift report. Use a different name on each phone or tablet that takes orders.</p>
+      <div class="sect">Data</div>
+      <button class="prow" id="csvSales"><div class="what"><b>Export sales (CSV)</b><span class="s">One row per order</span></div><i>&#8250;</i></button>
+      <button class="prow" id="csvShifts"><div class="what"><b>Export shift reports (CSV)</b><span class="s">One row per closed shift</span></div><i>&#8250;</i></button>
+      <p class="help">Sales and shifts are saved on this device and, when signed in on the Sync page, shared with the other devices.</p>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button class="tab on" data-v="shift">Shift</button>
+    <button class="tab" data-v="sales">Sales</button>
+    <button class="tab" data-v="hist">History</button>
+    <button class="tab" data-v="more">More</button>
+  </nav>
+  <div class="shade" id="shade"><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="receipt-logo.js"></script>
+<script src="printer.js"></script>
+<script src="menu-default.js"></script>
+<script src="inventory-default.js"></script>
+<script src="app-data.js"></script>
+<script src="shift-lib.js"></script>
+<script src="guard.js"></script>
+<script src="inv-log.js"></script>
+<script>
+(function () {
+  var D = window.MBData, S = window.MBShift, esc = D.esc, $ = function (id) { return document.getElementById(id); };
+  var N = D.peso;
+
+  /* ---------- helpers ---------- */
+  function row(l, v, strong, sub) { return '<div class="rrow' + (strong ? ' strong' : '') + '"><span>' + esc(l) + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span><span class="num">' + esc(v) + '</span></div>'; }
+  function reportHtml(r) {
+    var h = '<div class="sect">Cash drawer</div>' +
+      row('Starting cash', N(r.startCash)) + row('Cash payments', N(r.cashPayments)) + row('Cash refunds', N(r.cashRefunds)) +
+      row('Paid out (cash expenses)', N(r.paidOut)) + row('Expected cash amount', N(r.expected), 1);
+    if (r.actual !== null) h += row('Actual cash amount', N(r.actual)) + row('Extra over starting cash', N(r.actual - r.startCash), 0, 'Should match cash sales less cash paid out') + '<div class="rrow strong"><span>Difference</span><span class="num ' + (r.diff < 0 ? 'neg' : r.diff > 0 ? 'pos' : '') + '">' + S.sg(r.diff) + '</span></div>';
+    h += '<div class="sect">Sales summary</div>' +
+      row('Orders', String(r.orders)) + row('Gross sales', N(r.gross), 1) + row('Refunds', N(r.refunds)) + row('Discounts', N(r.discounts)) +
+      row('Net sales', N(r.net), 1) + row('Cash', N(r.cash)) + row('E-wallet', N(r.ewallet));
+    h += '<div class="sect">Expenses</div>';
+    h += r.expenses.length ? r.expenses.map(function (e) { return row(e.cat, N(e.amt), 0, (e.src === 'online' ? 'Online' : 'Cash') + (e.note ? ' · ' + e.note : '')); }).join('') : '<div class="none">No expenses during this shift.</div>';
+    h += row('Paid in cash', N(r.expCash)) + row('Paid online', N(r.expOnline)) + row('Total expenses', N(r.expCash + r.expOnline), 1);
+    h += '<div class="sect">Cups used</div>';
+    var ck = Object.keys(r.cups).sort(), lk = Object.keys(r.lids).sort();
+    h += ck.length ? ck.map(function (k) { return row(k, String(r.cups[k])); }).join('') + row('Total cups', String(r.drinks), 1) : '<div class="none">No drinks sold.</div>';
+    h += '<div class="sect">Lids used</div>';
+    h += lk.length ? lk.map(function (k) { return row(k, String(r.lids[k])); }).join('') : '<div class="none">No lids used.</div>';
+    if (r.inventory && r.inventory.length) {
+      h += '<div class="sect">Inventory updated</div>' + r.inventory.map(function (i) { return row(i.name, i.before + ' to ' + i.after, 0, 'Used ' + i.used); }).join('');
+    }
+    return h;
+  }
+  function liveReport() { var c = S.current(); return c ? S.report(c) : null; }
+  async function printReport(r) {
+    var m = await MBPrinter.print('shift', function (p) { S.reportReceipt(p, r); });
+    if (m) D.toast(m);
+  }
+
+  /* ---------- tabs ---------- */
+  var MAP = { shift: 'shift', sales: 'sales', hist: 'hist', detail: 'hist', more: 'more' };
+  function show(v) {
+    Object.keys(MAP).forEach(function (n) { $('v-' + n).classList.toggle('on', n === v); });
+    document.querySelectorAll('.tab').forEach(function (t) { t.classList.toggle('on', t.getAttribute('data-v') === MAP[v]); });
+    $('main').scrollTop = 0;
+    if (v === 'shift') paintShift();
+    if (v === 'sales') paintSales();
+    if (v === 'hist') paintHist();
+    if (v === 'more') $('posName').value = S.posName();
+  }
+  document.querySelectorAll('.tab').forEach(function (t) { t.onclick = function () { show(t.getAttribute('data-v')); }; });
+  $('back').onclick = function () { show('hist'); };
+
+  /* ---------- current shift ---------- */
+  function paintShift() {
+    var cur = S.current(), h = '';
+    if (!cur) {
+      var last = S.lastStart(), hist = S.shifts().hist, prev = hist[hist.length - 1];
+      h += '<div class="state"><b>No shift is open</b><span>Start a shift so sales can be saved and totaled.</span></div>' +
+        '<div class="frow"><label for="stCash">Starting cash</label><input class="field num" id="stCash" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00" value="' + esc(last) + '"></div>' +
+        '<div class="frow"><label for="stBy">Opened by</label><input class="field" id="stBy" type="text" maxlength="30" placeholder="Name" value="' + esc(S.lastUser()) + '" autocomplete="off"></div>' +
+        '<div class="actions"><button class="primary" id="startBtn">Start shift</button></div>';
+      if (prev) h += '<div class="mini">Last shift: number ' + prev.no + ', closed ' + esc(S.fmtDT(prev.closedAt)) + '. The starting cash is filled in with the same amount as before. Change it only if the drawer starts with a different amount.</div>';
+    } else {
+      var r = S.report(cur);
+      h += '<div class="state open"><b>Shift ' + cur.no + ' is open</b><span>Since ' + esc(S.fmtDT(cur.openedAt)) + (cur.openedBy ? ' · ' + esc(cur.openedBy) : '') + ' · ' + esc(cur.pos) + '</span></div>' +
+        reportHtml(r) +
+        '<div class="actions"><button class="secondary" id="printLive">Print current report</button><button class="primary" id="endBtn">End shift</button></div>';
+    }
+    $('shiftBody').innerHTML = h;
+  }
+  $('shiftBody').addEventListener('click', function (e) {
+    var t = e.target;
+    if (t.id === 'startBtn') {
+      var v = $('stCash').value.trim();
+      if (v === '' || isNaN(parseFloat(v)) || parseFloat(v) < 0) { D.toast('Enter the starting cash'); $('stCash').focus(); return; }
+      S.start(parseFloat(v), $('stBy').value); D.toast('Shift started'); paintShift();
+    } else if (t.id === 'printLive') { var r = liveReport(); if (r) printReport(r); }
+    else if (t.id === 'endBtn') openEnd();
+  });
+
+  /* ---------- end shift ---------- */
+  function openSheet() { $('shade').classList.add('on'); }
+  function closeSheet() { $('shade').classList.remove('on'); }
+  $('shade').addEventListener('click', function (e) { if (e.target === $('shade') || e.target.closest('[data-close]')) closeSheet(); });
+  function openEnd() {
+    var cur = S.current(); if (!cur) return;
+    var r = S.report(cur), counted = S.countedCash(S.phDate(Date.now()));
+    $('sheet').innerHTML = '<div class="sh-head"><div class="t"><b>End shift ' + cur.no + '</b><span>Expected cash ' + esc(N(r.expected)) + '</span></div><button class="icon-btn" data-close aria-label="Close">&times;</button></div><div class="sh-body">' +
+      '<div class="help">Count the cash in the drawer. ' + (counted > 0 ? 'Today\'s count in the Money counter is ' + esc(N(counted)) + '.' : 'You can also count it in the Money counter first.') + '</div>' +
+      '<div class="frow"><label for="enActual">Actual cash amount</label><input class="field num" id="enActual" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00" value="' + (counted > 0 ? counted : '') + '"></div>' +
+      '<div class="rrow strong"><span id="enDiffLabel">Difference</span><span class="num" id="enDiff">-</span></div>' +
+      (r.drinks ? '<div class="help">The cups and lids used are taken off Inventory when the shift ends.</div>' : '') +
+      '<div class="frow"><label for="enBy">Closed by</label><input class="field" id="enBy" type="text" maxlength="30" placeholder="Name" value="' + esc(S.lastUser() || cur.openedBy) + '" autocomplete="off"></div>' +
+      '</div><div class="sh-foot"><button class="secondary" id="enOnly">End shift</button><button class="primary" id="enPrint">End and print</button></div>';
+    openSheet(); updDiff(r);
+    $('enActual').oninput = function () { updDiff(r); };
+  }
+  function updDiff(r) {
+    var v = $('enActual').value.trim(), el = $('enDiff');
+    if (v === '' || isNaN(parseFloat(v))) { el.textContent = '-'; el.className = 'num'; return; }
+    var d = S.r2(parseFloat(v) - r.expected);
+    el.textContent = S.sg(d); el.className = 'num ' + (d < 0 ? 'neg' : d > 0 ? 'pos' : '');
+  }
+  $('sheet').addEventListener('click', async function (e) {
+    var id = e.target.id;
+    if (id === 'enOnly' || id === 'enPrint') {
+      var v = $('enActual').value.trim();
+      if (v === '' || isNaN(parseFloat(v)) || parseFloat(v) < 0) { D.toast('Enter the actual cash amount'); $('enActual').focus(); return; }
+      var takeOut = true;
+      var r = S.close($('enBy').value, parseFloat(v));
+      S.settleShift(r.no); S.saveShifts();
+      closeSheet(); D.toast('Shift ' + r.no + ' ended');
+      showDetail(r);
+      if (id === 'enPrint') await printReport(r);
+    } else if (id === 'saleRefund') {
+      if (confirm('Refund this order? It will be counted as a refund in the shift report.')) { S.refund(saleId); closeSheet(); paintSales(); D.toast('Order refunded'); }
+    } else if (id === 'saleDel') {
+      var ds = S.sales().filter(function (x) { return x.id === saleId; })[0];
+      if (ds && confirm('Delete order ' + ds.n + ' (' + N(ds.net) + ') for good?\nIt is removed from sales and from this shift. If money was given back, use Refund instead.')) {
+        if (S.deleteSale(saleId)) { closeSheet(); paintSales(); D.toast('Order deleted'); } else D.toast('Could not delete this order');
+      }
+    } else if (id === 'salePrint') {
+      var s = S.sales().filter(function (x) { return x.id === saleId; })[0];
+      var m = await MBPrinter.print('pos', function (p) { S.saleReceipt(p, s); }); if (m) D.toast(m);
+    }
+  });
+
+  /* ---------- sales ---------- */
+  var saleId = null;
+  function summary(s) {
+    var names = s.lines.map(function (l) { return (l.qty > 1 ? l.qty + ' x ' : '') + l.name; });
+    return names.length > 3 ? names.slice(0, 3).join(', ') + ' +' + (names.length - 3) + ' more' : names.join(', ');
+  }
+  function paintSales() {
+    var cur = S.current();
+    if (!cur) { $('salesBody').innerHTML = '<div class="empty">No shift is open. Start a shift to see its sales.</div>'; return; }
+    var list = S.salesOf(cur.no).slice().reverse();
+    $('salesBody').innerHTML = '<div class="mini" style="padding-top:12px">Shift ' + cur.no + ' · ' + list.length + (list.length === 1 ? ' order' : ' orders') + '</div>' +
+      (list.map(function (s) {
+        return '<button class="prow" data-id="' + esc(s.id) + '"><div class="what"><b>Order ' + s.n + ' · ' + esc(S.fmtTime(s.t)) +
+          (s.ref ? '<span class="badge warn">Refunded</span>' : '') + '</b><span class="s">' + esc(summary(s)) + '</span></div><div class="r num">' + N(s.net) +
+          '<span class="s" style="font-size:12px;color:var(--muted)">' + (s.pay === 'cash' ? 'Cash' : s.pay === 'split' ? 'Split' : 'E-wallet') + '</span></div></button>';
+      }).join('') || '<div class="empty">No sales yet in this shift.</div>');
+  }
+  $('salesBody').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-id]'); if (!b) return;
+    var s = S.sales().filter(function (x) { return x.id === b.getAttribute('data-id'); })[0]; if (!s) return;
+    saleId = s.id;
+    var body = s.lines.map(function (l) {
+      var unit = l.price; l.addons.forEach(function (a) { unit += a.p; });
+      var meta = []; if (l.opt) meta.push(l.opt); l.addons.forEach(function (a) { meta.push('+ ' + a.n); }); if (l.note) meta.push('Note: ' + l.note);
+      return row(l.qty + ' x ' + l.name, N(unit * l.qty), 0, meta.join(', '));
+    }).join('');
+    if (s.disc) body += row('Discount', '-' + N(s.disc));
+    body += row('Total', N(s.net), 1) + ((s.pays || []).map(function (x) { return row(x.name, N(x.amt)); }).join('')) + (S.cashOf(s) > 0 || s.pay === 'cash' ? row('Cash received', N(s.tend)) + row('Change', N(s.change)) : '');
+    $('sheet').innerHTML = '<div class="sh-head"><div class="t"><b>Order ' + s.n + '</b><span>' + esc(S.fmtDT(s.t)) + (s.type ? ' · ' + S.typeText(s.type) : '') + (s.ref ? ' · Refunded' : '') + '</span></div><button class="icon-btn" data-close aria-label="Close">&times;</button></div>' +
+      '<div class="sh-body">' + body + '</div><div class="sh-foot">' + (s.ref ? '' : '<button class="text-btn danger" id="saleRefund">Refund</button>') + (S.current() && s.shift === S.current().no ? '<button class="text-btn danger" id="saleDel">Delete</button>' : '') + '<button class="primary" id="salePrint">Print receipt</button></div>';
+    openSheet();
+  });
+
+  /* ---------- history ---------- */
+  function paintHist() {
+    var list = S.shifts().hist.slice().reverse();
+    $('histBody').innerHTML = list.map(function (r) {
+      return '<button class="prow" data-no="' + r.no + '"><div class="what"><b>Shift ' + r.no + '</b><span class="s">' + esc(S.fmtDT(r.openedAt)) + ' to ' + esc(S.fmtDT(r.closedAt)) +
+        '</span></div><div class="r num">' + N(r.net) + '<span class="s" style="font-size:12px;color:' + (r.diff < 0 ? 'var(--bad)' : 'var(--muted)') + '">' +
+        (r.diff === null ? '' : 'Diff ' + S.sg(r.diff)) + '</span></div></button>';
+    }).join('') || '<div class="empty">No closed shifts yet.</div>';
+  }
+  $('histBody').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-no]'); if (!b) return;
+    var r = S.shifts().hist.filter(function (x) { return x.no === +b.getAttribute('data-no'); })[0]; if (r) showDetail(r);
+  });
+  var shown = null;
+  function showDetail(r) {
+    shown = r;
+    $('detailTitle').textContent = 'Shift ' + r.no;
+    $('detailBody').innerHTML = '<div class="state"><b>Shift ' + r.no + (r.closedAt ? '' : ' (open)') + '</b><span>Opened ' + esc(S.fmtDT(r.openedAt)) + (r.openedBy ? ' by ' + esc(r.openedBy) : '') +
+      '</span><span>Closed ' + esc(S.fmtDT(r.closedAt)) + (r.closedBy ? ' by ' + esc(r.closedBy) : '') + ' · ' + esc(r.pos) + '</span></div>' + reportHtml(r) +
+      '<div class="actions" style="padding-top:6px"><a class="secondary" href="calendar.html?date=' + S.phDate(r.closedAt || r.openedAt) + '">See this day in the calendar</a></div>';
+    show('detail');
+  }
+  $('detailPrint').onclick = function () { if (shown) printReport(shown); };
+  $('detailDel').onclick = async function () {
+    if (!shown || !shown.closedAt) return;
+    var no = shown.no, n = S.salesOf(no).length;
+    if (!confirm('Delete Shift ' + no + ' and its ' + n + (n === 1 ? ' order' : ' orders') + ' (' + N(shown.net) + ' net) for good?\nExpenses and the money counter are not touched. This cannot be undone.')) return;
+    if (!confirm('Last check: really delete Shift ' + no + '? Download a backup first if you are not sure.')) return;
+    var gd = await MBGuard.ask({ title: 'Delete Shift ' + no, detail: n + (n === 1 ? ' order' : ' orders') + ' and the shift report will be removed.' });
+    if (!gd.ok) return;
+    MBGuard.log('Delete shift', 'Shift ' + no + ' · ' + n + ' orders · ' + N(shown.net) + ' net', gd.reason);
+    var back = shown.inventory && shown.inventory.length && window.MBInvLog &&
+      confirm('Shift ' + no + ' took cups and lids off the stock when it closed. Put them back in stock?');
+    if (back) {
+      var its = D.getInventory().items || [];
+      shown.inventory.forEach(function (u) {
+        var it = its.filter(function (i) { return String(i.name).toLowerCase() === String(u.name).toLowerCase(); })[0];
+        if (it && it.qty != null) MBInvLog.adjust('add', it.id, u.before - u.after);
+      });
+    }
+    if (S.deleteShift(no)) { shown = null; D.toast('Shift ' + no + ' deleted'); show('hist'); paintHist(); } else D.toast('Could not delete this shift');
+  };
+
+  /* ---------- more ---------- */
+  $('posName').onchange = function () { S.setPosName($('posName').value); D.toast('Saved'); };
+  function q(s) { return '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"'; }
+  $('csvSales').onclick = function () {
+    var lines = ['Date,Time,Shift,Order,Items,Gross,Discount,Net,Payment,Refunded'];
+    S.sales().forEach(function (s) {
+      lines.push([S.phDate(s.t), q(S.fmtTime(s.t)), s.shift == null ? '' : s.shift, s.n, q(summary(s)), s.gross, s.disc, s.net, s.pay === 'cash' ? 'Cash' : s.pay === 'split' ? 'Split' : 'E-wallet', s.ref ? 'yes' : ''].join(','));
+    });
+    D.download('marina-bays-sales.csv', lines.join('\n'), 'text/csv'); D.toast('CSV saved');
+  };
+  $('csvShifts').onclick = function () {
+    var lines = ['Shift,POS,Opened,Opened by,Closed,Closed by,Starting cash,Cash payments,Cash refunds,Paid out,Expected,Actual,Difference,Gross,Refunds,Discounts,Net,Cash,E-wallet,Expenses cash,Expenses online,Cups'];
+    S.shifts().hist.forEach(function (r) {
+      lines.push([r.no, q(r.pos), q(S.fmtDT(r.openedAt)), q(r.openedBy), q(S.fmtDT(r.closedAt)), q(r.closedBy), r.startCash, r.cashPayments, r.cashRefunds, r.paidOut, r.expected,
+        r.actual == null ? '' : r.actual, r.diff == null ? '' : r.diff, r.gross, r.refunds, r.discounts, r.net, r.cash, r.ewallet, r.expCash, r.expOnline, r.drinks].join(','));
+    });
+    D.download('marina-bays-shifts.csv', lines.join('\n'), 'text/csv'); D.toast('CSV saved');
+  };
+
+  paintShift();
+  var qn = /[?&]no=(\d+)/.exec(location.search);
+  if (qn) { var want = S.shifts().hist.filter(function (x) { return x.no === +qn[1]; })[0]; if (want) showDetail(want); }
+  setInterval(function () { if ($('v-shift').classList.contains('on') && !$('shade').classList.contains('on') && S.current()) paintShift(); }, 20000);
+  window.addEventListener('pageshow', function () { if ($('v-shift').classList.contains('on')) paintShift(); });
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>

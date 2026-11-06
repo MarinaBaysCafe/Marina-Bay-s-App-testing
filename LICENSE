@@ -1,0 +1,24 @@
+Copyright (c) 2026 Marina Bay's Cafe. All rights reserved.
+
+This software, including its source code, design, menu data, recipes data,
+inventory data, text, and logo files (together, the "Software"), is the private
+property of Marina Bay's Cafe.
+
+No license is granted except as stated here. Marina Bay's Cafe allows its own
+staff to use the Software for running the cafe.
+
+Without written permission from Marina Bay's Cafe, you may not:
+  - copy, publish, or share the Software or any part of it;
+  - change, adapt, or build other products from it;
+  - sell, rent, lend, or sublicense it;
+  - use the Marina Bay's Cafe name or logo in any other product or business.
+
+The Software is provided "as is", without warranty of any kind. Marina Bay's
+Cafe is not responsible for any loss of data or income that comes from using it.
+
+The only outside code the Software loads is the Firebase library from Google,
+used for cloud sync, which has its own license. RawBT, which can be used for
+receipt printing, is a separate app owned by its own maker. Neither is part of
+the Software.
+
+Contact: marinabayscafe@gmail.com

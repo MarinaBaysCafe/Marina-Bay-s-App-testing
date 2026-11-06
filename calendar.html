@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<!-- Copyright (c) 2026 Marina Bay's Cafe. All rights reserved. -->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="security.js"></script>
+<script src="firebase-config.js"></script>
+<script src="cloud.js" data-uses="sales,shifts,expenses,counter,inventory,invlog"></script>
+<meta name="robots" content="noindex, nofollow">
+<meta name="author" content="Marina Bay's Cafe">
+<meta name="copyright" content="Copyright 2026 Marina Bay's Cafe. All rights reserved.">
+<title>Calendar | Marina Bay's Cafe</title>
+<meta name="theme-color" content="#0d3a4e">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/counter-apple-touch-icon.png">
+<link rel="stylesheet" href="app.css">
+<style>
+  .monthbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 8px 16px; }
+  .monthbar h2 { margin: 0; font-size: 20px; font-weight: 650; }
+  .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0 16px 12px; }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: #fff; }
+  .card small { display: block; font-size: 12px; color: var(--muted); }
+  .card b { font-size: 19px; font-weight: 700; }
+  .card.good b { color: var(--teal); }
+  .card.out b { color: var(--spend); }
+  .dow, .days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .dow div { text-align: center; font-size: 12px; color: var(--muted); padding: 6px 0; }
+  .days { border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin: 0 16px; }
+  .cell { min-height: 62px; border: none; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: #fff; font: inherit; font-size: 14px; color: var(--ink); padding: 5px 4px; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 1px; min-width: 0; overflow: hidden; }
+  .cell.blank { background: var(--soft); cursor: default; }
+  .cell .a { font-size: 10px; font-weight: 650; color: var(--teal); line-height: 1.15; word-break: break-all; }
+  .cell .b { font-size: 10px; font-weight: 650; color: var(--spend); line-height: 1.15; word-break: break-all; }
+  .cell.today .d { display: inline-block; width: 22px; height: 22px; line-height: 22px; text-align: center; border-radius: 50%; background: var(--ink); color: #fff; font-size: 13px; }
+  .cell.sel { background: #e9f0f3; box-shadow: inset 0 0 0 2px var(--teal); }
+  .legend { padding: 8px 16px 14px; font-size: 12px; color: var(--muted); }
+  .legend i { font-style: normal; font-weight: 650; }
+  .legend .t { color: var(--teal); } .legend .s { color: var(--spend); }
+
+  .day-h { padding: 14px 16px 2px; font-size: 19px; font-weight: 650; }
+  .day-sub { padding: 0 16px 10px; font-size: 13px; color: var(--muted); }
+  .rrow { display: flex; justify-content: space-between; gap: 12px; padding: 9px 16px; border-top: 1px solid var(--line); font-size: 15px; }
+  .rrow.strong { font-weight: 650; }
+  .rrow small { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }
+  a.rrow { color: var(--ink); text-decoration: none; }
+  a.rrow:active { background: var(--soft); }
+  .none { padding: 10px 16px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+  .links { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 16px 24px; }
+  .links a { border: 1.5px solid var(--teal); color: var(--teal); border-radius: 6px; padding: 9px 14px; font-weight: 650; font-size: 14px; text-decoration: none; }
+  .neg { color: var(--bad); } .pos { color: #2f6b4f; }
+  .daycard { border-top: 6px solid var(--soft); margin-top: 6px; }
+  .inv-add { display: flex; gap: 6px; padding: 4px 16px 10px; flex-wrap: wrap; }
+  .inv-add .field { flex: 1 1 110px; min-width: 0; } .inv-add #invAmt { flex: 0 1 80px; }
+  .inv-wrap { overflow-x: auto; padding: 0 16px; }
+  table.inv { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.inv th { text-align: right; font-size: 12px; color: var(--muted); padding: 4px; } table.inv th:first-child, table.inv td:first-child, table.inv th:last-child, table.inv td:last-child { text-align: left; }
+  table.inv td { padding: 4px; border-top: 1px solid var(--line); text-align: right; }
+  table.inv td input { width: 64px; text-align: right; border: 1px solid var(--line); border-radius: 4px; padding: 4px; font: inherit; }
+  table.inv tr.g td { background: var(--soft); font-weight: 650; text-align: left; }
+  .seg2 { display: flex; border: 1.5px solid #c9c1b5; border-radius: 6px; overflow: hidden; }
+  .seg2 button { border: none; background: #fff; font: inherit; font-size: 15px; padding: 8px 16px; color: var(--ink); cursor: pointer; }
+  .seg2 button + button { border-left: 1.5px solid #c9c1b5; }
+  .seg2 button.on { background: var(--teal); color: #fff; font-weight: 650; }
+</style>
+<link rel="stylesheet" href="wide.css">
+<link rel="stylesheet" href="brand.css">
+</head>
+<body class="pg-calendar">
+<div class="app">
+  <div class="top">
+    <a href="index.html" aria-label="Home" style="display:flex"><img src="icons/logo-64.png" alt=""></a>
+    <div><b>Marina Bay's Cafe</b><span class="sub">Calendar</span></div>
+    <nav class="apps" aria-label="Apps"><a href="analytics.html">Analytics</a><a href="index.html">All apps</a></nav>
+  </div>
+
+  <main id="main">
+    <section class="view on" id="v-cal">
+      <div class="cal-left">
+        <div class="monthbar">
+          <h2 id="monthTitle"></h2>
+          <div style="display:flex;gap:2px">
+            <button class="icon-btn" id="todayBtn" aria-label="Go to today" style="width:auto;font-size:14px;padding:0 10px;font-weight:650;color:var(--teal)">Today</button>
+            <button class="icon-btn" id="prevM" aria-label="Previous month">&#8249;</button>
+            <button class="icon-btn" id="nextM" aria-label="Next month">&#8250;</button>
+          </div>
+        </div>
+        <div class="cards" id="cards"></div>
+        <div class="dow"><div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div></div>
+        <div class="days" id="days"></div>
+        <div class="legend"><i class="t">Teal</i> is net sales and <i class="s">brown</i> is expenses for the day. Tap a day to see everything for it.</div>
+      </div>
+      <div class="cal-right daycard" id="dayPanel"></div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="inventory-default.js"></script>
+<script src="app-data.js"></script>
+<script src="shift-lib.js"></script>
+<script src="inv-log.js"></script>
+<script>
+(function () {
+  var D = window.MBData, S = window.MBShift, esc = D.esc, $ = function (id) { return document.getElementById(id); };
+  var N = D.peso, MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function short(n) { n = Math.round(n); return n >= 10000 ? (Math.round(n / 100) / 10) + 'k' : n.toLocaleString('en-PH'); }
+  function sg(n) { return S.sg(n); }
+
+  var today = MBInvLog.localToday(), selected = today;
+  var qd = /[?&]date=(\d{4}-\d{2}-\d{2})/.exec(location.search); if (qd) selected = qd[1];
+  var viewY = +selected.slice(0, 4), viewM = +selected.slice(5, 7) - 1;
+
+  function row(l, v, strong, sub, cls) { return '<div class="rrow' + (strong ? ' strong' : '') + '"><span>' + esc(l) + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span><span class="num ' + (cls || '') + '">' + esc(v) + '</span></div>'; }
+
+  function paintMonth() {
+    $('monthTitle').textContent = MONTHS[viewM] + ' ' + viewY;
+    var mo = S.month(viewY, viewM), t = mo.total;
+    $('cards').innerHTML =
+      '<div class="card good"><small>Net sales</small><b class="num">' + N(t.net) + '</b></div>' +
+      '<div class="card out"><small>Expenses</small><b class="num">' + N(t.expCash + t.expOnline) + '</b></div>' +
+      '<div class="card"><small>After expenses</small><b class="num ' + (t.after < 0 ? 'neg' : '') + '">' + sg(t.after).replace('+', '') + '</b></div>' +
+      '<div class="card"><small>Orders · Cups</small><b class="num">' + t.orders + ' · ' + t.drinks + '</b></div>';
+    var first = new Date(Date.UTC(viewY, viewM, 1)).getUTCDay(), count = new Date(Date.UTC(viewY, viewM + 1, 0)).getUTCDate(), h = '';
+    for (var i = 0; i < first; i++) h += '<div class="cell blank"></div>';
+    for (var d = 1; d <= count; d++) {
+      var key = viewY + '-' + pad(viewM + 1) + '-' + pad(d), x = mo.days[key], spent = x ? x.expCash + x.expOnline : 0;
+      h += '<button class="cell' + (key === today ? ' today' : '') + (key === selected ? ' sel' : '') + '" data-k="' + key + '"><span class="d num">' + d + '</span>' +
+        (x && x.net > 0 ? '<span class="a num">' + short(x.net) + '</span>' : '') + (spent > 0 ? '<span class="b num">-' + short(spent) + '</span>' : '') + '</button>';
+    }
+    var tail = (7 - ((first + count) % 7)) % 7; for (var j = 0; j < tail; j++) h += '<div class="cell blank"></div>';
+    $('days').innerHTML = h;
+  }
+
+  function paintDay() {
+    var x = S.day(selected), dt = new Date(selected + 'T00:00:00Z'), h = '';
+    h += '<div class="day-h">' + dt.toLocaleDateString('en-PH', { timeZone: 'UTC', weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) + '</div>';
+    h += '<div class="day-sub">' + (selected === today ? 'Today' : selected > today ? 'Upcoming day' : '') + '</div>';
+    var any = x.orders || x.expenses.length || x.counted || x.online || x.shifts.length;
+    if (!any) h += '<div class="none">Nothing recorded for this day.</div>';
+    else {
+      h += '<div class="cards"><div class="card good"><small>Net sales</small><b class="num">' + N(x.net) + '</b></div><div class="card out"><small>Expenses</small><b class="num">' + N(x.expCash + x.expOnline) + '</b></div></div>';
+      h += '<div class="sect">Sales</div>' + row('Orders', String(x.orders)) + row('Gross sales', N(x.gross)) + row('Refunds', N(x.refunds)) + row('Discounts', N(x.discounts)) +
+        row('Net sales', N(x.net), 1) + row('Cash', N(x.cash)) + row('E-wallet', N(x.ewallet)) + row('Net after expenses', sg(x.after).replace('+', ''), 1, '', x.after < 0 ? 'neg' : '');
+      h += '<div class="sect">Shifts</div>';
+      h += x.shifts.length ? x.shifts.map(function (s) {
+        var when = S.fmtTime(s.openedAt) + (s.closedAt ? ' to ' + S.fmtTime(s.closedAt) : ' (open)');
+        return '<a class="rrow" href="shift.html' + (s.open ? '' : '?no=' + s.no) + '"><span>Shift ' + s.no + '<small>' + esc(when + ' · ' + s.pos) + '</small></span><span class="num">' +
+          (s.open ? 'Open' : N(s.net) + '<small class="' + (s.diff < 0 ? 'neg' : '') + '">' + (s.diff === null ? '' : 'Diff ' + sg(s.diff)) + '</small>') + '</span></a>';
+      }).join('') : '<div class="none">No shift.</div>';
+      h += '<div class="sect">Money counter</div>';
+      h += (x.counted || x.online) ? row('Cash counted', N(x.counted)) + row('Online payments entered', N(x.online)) + row('Cash after cash expenses', N(x.counted - x.expCash), 1) : '<div class="none">No count entered.</div>';
+      h += '<div class="sect">Expenses</div>';
+      h += x.expenses.length ? x.expenses.map(function (e) { return row(e.cat, N(e.amt), 0, (e.src === 'online' ? 'Online' : 'Cash') + (e.note ? ' · ' + e.note : '')); }).join('') +
+        row('Paid in cash', N(x.expCash)) + row('Paid online', N(x.expOnline)) : '<div class="none">No expenses.</div>';
+      var ck = Object.keys(x.cups).sort(), lk = Object.keys(x.lids).sort();
+      h += '<div class="sect">Cups and lids from sales</div>';
+      h += ck.length ? ck.map(function (k) { return row(k, String(x.cups[k])); }).join('') + lk.map(function (k) { return row(k, String(x.lids[k])); }).join('') : '<div class="none">No drinks sold.</div>';
+    }
+    h += invHtml();
+    h += '<div class="links"><a href="money-counter.html?date=' + selected + '">Money counter</a><a href="expenses.html?date=' + selected + '">Expenses</a><a href="shift.html">Shift</a><a href="pos.html">POS</a></div>';
+    $('dayPanel').innerHTML = h;
+  }
+
+
+  var invSearch = '', invAll = false, invKind = 'used';
+  function optHtml(rows) {
+    var q = invSearch.toLowerCase();
+    return rows.filter(function (r) { return !q || r.item.name.toLowerCase().indexOf(q) > -1; }).map(function (r) {
+      return '<option value="' + esc(r.item.id) + '">' + esc(r.item.name) + (r.item.unit ? ' (' + esc(r.item.unit) + ')' : '') + '</option>'; }).join('');
+  }
+  function invHtml() {
+    var rows = MBInvLog.range(selected, selected)[selected], h = '<div class="sect">Inventory</div>';
+    var shown = rows.filter(function (r) { return invAll || r.used > 0 || r.added > 0; });
+    var late = selected < today && selected >= MBInvLog.addDays(today, -MBInvLog.LATE_DAYS);
+    if (selected === today || late) {
+      h += '<div class="inv-add"><div class="seg2"><button data-kind="used" class="' + (invKind === 'used' ? 'on' : '') + '">Used</button><button data-kind="add" class="' + (invKind === 'add' ? 'on' : '') + '">Added</button></div>' +
+        '<input class="field" id="invQ" type="search" placeholder="Search item" value="' + esc(invSearch) + '">' +
+        '<select class="field" id="invSel">' + optHtml(rows) + '</select>' +
+        '<input class="field num" id="invAmt" type="number" inputmode="decimal" min="0" step="any" placeholder="Amount">' +
+        '<button class="primary" id="invDone">Done</button></div>' +
+        '<div class="note" style="padding:0 16px 8px;font-size:12px;color:var(--muted)">Used is for loss or anything not counted from sales. Cups and lids are added automatically when a shift is closed. To fix a wrong count, recount on the Inventory page.</div>' + (late ? '<div class="note" style="padding:0 16px 8px;font-size:12px;color:var(--bad)">Late entry for this day. The stock count today changes by the same amount, and the days after this one are updated.</div>' : '');
+    } else h += '<div class="note" style="padding:0 16px 8px;font-size:12px;color:var(--muted)">' + (selected > today ? 'Stock cannot be changed for a day that has not happened yet.' : 'Late entries only go back ' + MBInvLog.LATE_DAYS + ' days.') + '</div>';
+    h += '<div class="inv-wrap"><table class="inv"><thead><tr><th>Item</th><th>Beg</th><th>Added</th><th>Used</th><th>End</th><th>Units</th></tr></thead><tbody>';
+    var last = null;
+    shown.forEach(function (r) {
+      var g = r.item.group || 'Other'; if (g !== last) { h += '<tr class="g"><td colspan="6">' + esc(g) + '</td></tr>'; last = g; }
+      h += '<tr><td>' + esc(r.item.name) + '</td><td class="num">' + (r.beg == null ? '' : r.beg) + '</td><td class="num">' + (r.added || '') + '</td>' +
+        '<td class="num" title="Shift ' + r.auto + ' + manual ' + r.man + '">' + (r.used || '') + '</td><td class="num">' + (r.end == null ? '' : r.end) + '</td><td>' + esc(r.item.unit || '') + '</td></tr>';
+    });
+    if (!shown.length) h += '<tr><td colspan="6" class="none">No inventory activity for this day.</td></tr>';
+    h += '</tbody></table></div><div class="links" style="padding-bottom:4px"><a href="#" id="invAll">' + (invAll ? 'Hide unchanged items' : 'Show all items') + '</a><a href="#" id="invX">Save as .xlsx</a></div>';
+    return h;
+  }
+  $('dayPanel').addEventListener('input', function (e) {
+    if (e.target.id !== 'invQ') return;
+    invSearch = e.target.value; $('invSel').innerHTML = optHtml(MBInvLog.range(selected, selected)[selected]);
+  });
+  $('dayPanel').addEventListener('click', function (e) {
+    var t = e.target, k = t.closest && t.closest('button[data-kind]');
+    if (k) { invKind = k.getAttribute('data-kind'); paintDay(); return; }
+    if (t.id === 'invDone') {
+      var n = parseFloat($('invAmt').value), id = $('invSel').value;
+      if (!id || !(n > 0)) { D.toast('Pick an item and enter an amount'); return; }
+      var msg = MBInvLog.adjust(invKind, id, n, selected);
+      if (msg) { D.toast(msg); return; }
+      invSearch = ''; paintDay(); D.toast('Saved');
+    } else if (t.id === 'invAll') { e.preventDefault(); invAll = !invAll; paintDay(); }
+    else if (t.id === 'invX') {
+      e.preventDefault();
+      var from = viewY + '-' + pad(viewM + 1) + '-01', to = viewY + '-' + pad(viewM + 1) + '-' + pad(new Date(Date.UTC(viewY, viewM + 1, 0)).getUTCDate());
+      MBInvLog.exportXlsx(from, to, selected);
+    }
+  });
+
+  $('days').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-k]'); if (!b) return;
+    selected = b.getAttribute('data-k'); paintMonth(); paintDay();
+    if (window.innerWidth < 768) $('dayPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  $('prevM').onclick = function () { viewM--; if (viewM < 0) { viewM = 11; viewY--; } paintMonth(); };
+  $('nextM').onclick = function () { viewM++; if (viewM > 11) { viewM = 0; viewY++; } paintMonth(); };
+  $('todayBtn').onclick = function () { selected = today; viewY = +today.slice(0, 4); viewM = +today.slice(5, 7) - 1; paintMonth(); paintDay(); };
+
+  setInterval(function () {
+    var n = MBInvLog.localToday();
+    if (n !== today) { if (selected === today) { selected = n; viewY = +n.slice(0, 4); viewM = +n.slice(5, 7) - 1; } today = n; paintMonth(); paintDay(); }
+  }, 30000);
+  paintMonth(); paintDay();
+  window.addEventListener('pageshow', function () { paintMonth(); paintDay(); });
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>

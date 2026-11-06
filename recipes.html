@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<!-- Copyright (c) 2026 Marina Bay's Cafe. All rights reserved. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="security.js"></script>
+<script src="firebase-config.js"></script>
+<script src="cloud.js" data-uses="recipes,menu,inventory"></script>
+<meta name="robots" content="noindex, nofollow">
+<meta name="author" content="Marina Bay's Cafe">
+<meta name="copyright" content="Copyright 2026 Marina Bay's Cafe. All rights reserved.">
+<title>Recipes | Marina Bay's Cafe</title>
+<meta name="theme-color" content="#0d3a4e">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/counter-apple-touch-icon.png">
+<link rel="stylesheet" href="app.css">
+<style>
+  .tabs { grid-template-columns: repeat(2, 1fr); }
+  .filters { display: flex; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  .filters input, .filters select { height: 42px; border: 1.5px solid #c9c1b5; border-radius: 6px; padding: 0 10px; font: inherit; background: #fff; color: var(--ink); min-width: 0; }
+  .filters input { flex: 1; }
+  .filters select { max-width: 45%; }
+  .ing { padding: 8px 16px; border-bottom: 1px solid var(--line); }
+  .ing .r1, .ing .r2 { display: flex; gap: 8px; align-items: center; }
+  .ing .r2 { margin-top: 6px; }
+  .ing .f { border: 1.5px solid #c9c1b5; border-radius: 6px; height: 40px; padding: 0 8px; font: inherit; background: #fff; color: var(--ink); min-width: 0; }
+  .ing .f:focus { outline: none; border-color: var(--teal); }
+  .ing .nm { flex: 1; }
+  .ing .am { width: 30%; }
+  .ing .un { width: 30%; }
+  .ing .co { flex: 1; }
+  .ing .x { width: 36px; height: 36px; border: none; background: none; color: var(--muted); font-size: 20px; cursor: pointer; flex: none; }
+  .costline { padding: 12px 16px; font-size: 14px; color: var(--muted); border-bottom: 1px solid var(--line); background: var(--soft); }
+  .costline b { color: var(--ink); }
+  .v-title { padding: 14px 16px 4px; font-size: 20px; font-weight: 650; }
+  .v-sub { padding: 0 16px 10px; color: var(--muted); font-size: 14px; }
+  .v-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--line); }
+  .v-row span:last-child { color: var(--muted); text-align: right; }
+  ol.steps { margin: 0; padding: 4px 16px 8px 36px; }
+  ol.steps li { padding: 5px 0; }
+  .v-text { padding: 4px 16px 12px; white-space: pre-wrap; }
+</style>
+<link rel="stylesheet" href="wide.css">
+<link rel="stylesheet" href="brand.css">
+</head>
+<body class="pg-recipes">
+<div class="app">
+  <div class="top">
+    <a href="index.html" aria-label="Home" style="display:flex"><img src="icons/logo-64.png" alt=""></a>
+    <div><b>Marina Bay's Cafe</b><span class="sub">Recipes</span></div>
+    <nav class="apps" aria-label="Apps"><a href="menu.html">Menu</a><a href="index.html">All apps</a></nav>
+  </div>
+
+  <main id="main">
+    <!-- LIST -->
+    <section class="view on" id="v-list">
+      <div class="filters"><input id="q" type="search" placeholder="Search recipes" autocomplete="off" aria-label="Search recipes"><select id="fcat" aria-label="Filter"></select></div>
+      <div id="rlist"></div>
+      <button class="add-btn" id="addBtn">Add recipe</button>
+    </section>
+
+    <!-- VIEW -->
+    <section class="view" id="v-view">
+      <div class="editbar"><button class="icon-btn" data-back aria-label="Back">&#8249;</button><b>Recipe</b></div>
+      <div id="rview"></div>
+      <div class="actions"><button class="primary" id="editBtn">Edit recipe</button></div>
+    </section>
+
+    <!-- EDIT -->
+    <section class="view" id="v-edit">
+      <div class="editbar"><button class="icon-btn" data-back aria-label="Back">&#8249;</button><b id="editTitle">Add recipe</b></div>
+      <div class="frow"><label for="rName">Name</label><input class="field" id="rName" type="text" maxlength="60" autocomplete="off"></div>
+      <div class="frow"><label for="rItem">Menu item</label><select class="field" id="rItem"></select></div>
+      <div class="frow"><label for="rSize" id="rSizeLabel">Size</label><span id="rSizeWrap" style="flex:1;display:flex;justify-content:flex-end"></span></div>
+      <div class="sect" style="padding-bottom:2px">Ingredients</div>
+      <div id="ings"></div>
+      <div style="padding:10px 16px"><button class="small-btn" id="addIng">+ Add ingredient</button></div>
+      <div class="costline" id="costline"></div>
+      <div class="block"><label for="rSteps">Steps</label><small>One step per line.</small><textarea class="field" id="rSteps" rows="5" maxlength="2000"></textarea></div>
+      <div class="block"><label for="rNotes">Notes</label><textarea class="field" id="rNotes" rows="2" maxlength="500"></textarea></div>
+      <div class="actions"><button class="primary" id="saveBtn">Save</button><button class="text-btn danger" id="delBtn">Delete</button></div>
+    </section>
+
+    <!-- DATA -->
+    <section class="view" id="v-data">
+      <div class="prow" style="cursor:default"><div class="what"><b id="stat"></b><span class="s">Recipes are saved on this device.</span></div></div>
+      <button class="prow" id="backup"><div class="what"><b>Save a backup</b><span class="s">Downloads all recipes as a file</span></div><i>&#8250;</i></button>
+      <button class="prow" id="restore"><div class="what"><b>Restore from a backup</b><span class="s">Replaces the recipes with a saved backup file</span></div><i>&#8250;</i></button>
+      <input type="file" id="file" accept=".json,application/json" hidden>
+      <button class="prow" id="csv"><div class="what"><b>Export to spreadsheet (CSV)</b><span class="s">One row per ingredient</span></div><i>&#8250;</i></button>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button class="tab on" data-v="list">Recipes</button>
+    <button class="tab" data-v="data">Data</button>
+  </nav>
+</div>
+<div class="toast" id="toast"></div>
+<datalist id="invnames"></datalist>
+<datalist id="units"><option value="g"><option value="kg"><option value="ml"><option value="l"><option value="oz"><option value="pcs"><option value="shot"><option value="scoop"><option value="pump"><option value="tsp"><option value="tbsp"><option value="cup"></datalist>
+
+<script src="menu-default.js"></script>
+<script src="inventory-default.js"></script>
+<script src="app-data.js"></script>
+<script>
+(function () {
+  var D = window.MBData, esc = D.esc, $ = function (id) { return document.getElementById(id); };
+  var R = D.getRecipes();
+  $('invnames').innerHTML = D.getInventory().items.map(function (i) { return '<option value="' + esc(i.name) + '">'; }).join('');
+  function persist(msg) { if (!D.saveRecipes()) D.toast('Could not save. Storage may be full.'); else if (msg) D.toast(msg); }
+  function num(v) { var n = parseFloat(v); return isNaN(n) ? 0 : n; }
+
+  var MAP = { list: 'list', view: 'list', edit: 'list', data: 'data' };
+  function show(v) {
+    Object.keys(MAP).forEach(function (n) { $('v-' + n).classList.toggle('on', n === v); });
+    document.querySelectorAll('.tab').forEach(function (t) { t.classList.toggle('on', t.getAttribute('data-v') === MAP[v]); });
+    $('main').scrollTop = 0;
+    if (v === 'list') paintList();
+    if (v === 'data') paintData();
+  }
+  document.querySelectorAll('.tab').forEach(function (t) { t.onclick = function () { show(t.getAttribute('data-v')); }; });
+  document.querySelectorAll('[data-back]').forEach(function (b) { b.onclick = function () { show('list'); }; });
+
+  function linkedItem(r) { return r.itemId ? D.item(r.itemId) : null; }
+
+  /* ---------- list ---------- */
+  function paintFilter() {
+    var h = '<option value="all">All</option><option value="none">Not linked</option>';
+    D.getMenu().categories.forEach(function (c) { h += '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>'; });
+    var keep = $('fcat').value || 'all';
+    $('fcat').innerHTML = h; $('fcat').value = $('fcat').querySelector('option[value="' + keep + '"]') ? keep : 'all';
+  }
+  function paintList() {
+    paintFilter();
+    var q = $('q').value.trim().toLowerCase(), f = $('fcat').value, h = '';
+    R.recipes.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (r) {
+      var it = linkedItem(r);
+      if (f === 'none' && it) return;
+      if (f !== 'all' && f !== 'none' && (!it || it.cat !== f)) return;
+      if (q && (r.name + ' ' + (it ? it.name : '')).toLowerCase().indexOf(q) === -1) return;
+      var cost = D.recipeCost(r);
+      h += '<button class="prow" data-id="' + esc(r.id) + '"><div class="what"><b>' + esc(r.name) + '</b><span class="s">' +
+        esc((it ? it.name : 'Not linked to a menu item') + (r.size ? ' · ' + r.size : '')) + '</span></div>' +
+        (cost ? '<div class="r num">' + D.pesoShort(cost) + '</div>' : '') + '<i>&#8250;</i></button>';
+    });
+    $('rlist').innerHTML = h || '<div class="empty">' + (R.recipes.length ? 'No recipes match.' : 'No recipes yet. Add your first one.') + '</div>';
+  }
+  $('q').addEventListener('input', paintList);
+  $('fcat').onchange = paintList;
+  $('rlist').addEventListener('click', function (e) { var b = e.target.closest('button[data-id]'); if (b) openView(b.getAttribute('data-id')); });
+  $('addBtn').onclick = function () { openEdit(null); };
+
+  /* ---------- view ---------- */
+  var curId = null;
+  function priceFor(r) {
+    var it = linkedItem(r); if (!it || !r.size) return null;
+    var o = it.options.filter(function (x) { return x.label === r.size; })[0];
+    return o ? Number(o.price) : null;
+  }
+  function openView(id) {
+    curId = id;
+    var r = R.recipes.filter(function (x) { return x.id === id; })[0]; if (!r) return;
+    var it = linkedItem(r), cost = D.recipeCost(r), price = priceFor(r), h = '';
+    h += '<div class="v-title">' + esc(r.name) + '</div>';
+    h += '<div class="v-sub">' + esc((it ? it.name : 'Not linked to a menu item') + (r.size ? ' · ' + r.size : '')) + '</div>';
+    if (cost) {
+      var line = 'Cost <b class="num">' + D.peso(cost) + '</b>';
+      if (price) line += ' · Selling price <b class="num">' + D.peso(price) + '</b> · Margin <b class="num">' + D.peso(price - cost) + ' (' + Math.round((price - cost) / price * 100) + '%)</b>';
+      h += '<div class="costline">' + line + '</div>';
+    }
+    h += '<div class="sect">Ingredients</div>';
+    h += (r.ingredients || []).map(function (g) {
+      return '<div class="v-row"><span>' + esc(g.n) + '</span><span class="num">' + esc((g.a !== '' && g.a != null ? g.a + ' ' : '') + (g.u || '')) + '</span></div>';
+    }).join('') || '<div class="empty">No ingredients added.</div>';
+    var steps = String(r.steps || '').split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+    if (steps.length) h += '<div class="sect">Steps</div><ol class="steps">' + steps.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ol>';
+    if (r.notes) h += '<div class="sect">Notes</div><div class="v-text">' + esc(r.notes) + '</div>';
+    $('rview').innerHTML = h;
+    show('view');
+  }
+  $('editBtn').onclick = function () { openEdit(curId); };
+
+  /* ---------- edit ---------- */
+  var ed = null, isNew = false;
+  function paintItemSelect() {
+    var h = '<option value="">Not linked</option>';
+    var m = D.getMenu();
+    m.categories.forEach(function (c) {
+      var list = D.itemsIn(c.id); if (!list.length) return;
+      h += '<optgroup label="' + esc(c.name) + '">' + list.map(function (i) { return '<option value="' + esc(i.id) + '">' + esc(i.name) + '</option>'; }).join('') + '</optgroup>';
+    });
+    $('rItem').innerHTML = h; $('rItem').value = ed.itemId || '';
+    if ($('rItem').value !== (ed.itemId || '')) $('rItem').value = '';
+  }
+  function paintSize() {
+    var it = ed.itemId ? D.item(ed.itemId) : null;
+    if (it && it.options.length) {
+      $('rSizeWrap').innerHTML = '<select class="field" id="rSize" aria-labelledby="rSizeLabel">' + it.options.map(function (o) {
+        return '<option value="' + esc(o.label) + '">' + esc(o.label) + ' (' + D.pesoShort(o.price) + ')</option>'; }).join('') + '</select>';
+      var has = it.options.some(function (o) { return o.label === ed.size; });
+      $('rSize').value = has ? ed.size : it.options[0].label; ed.size = $('rSize').value;
+    } else {
+      $('rSizeWrap').innerHTML = '<input class="field" id="rSize" type="text" maxlength="40" placeholder="Optional" aria-labelledby="rSizeLabel" value="' + esc(ed.size || '') + '">';
+    }
+    $('rSize').onchange = $('rSize').oninput = function () { ed.size = $('rSize').value; };
+  }
+  function paintIngs() {
+    $('ings').innerHTML = ed.ingredients.map(function (g, i) {
+      return '<div class="ing" data-i="' + i + '"><div class="r1"><input class="f nm g-n" type="text" list="invnames" maxlength="40" placeholder="Ingredient" value="' + esc(g.n) + '" aria-label="Ingredient">' +
+        '<button class="x" data-rm="' + i + '" aria-label="Remove ingredient">&times;</button></div>' +
+        '<div class="r2"><input class="f am g-a num" type="number" inputmode="decimal" min="0" step="any" placeholder="Amount" value="' + esc(g.a) + '" aria-label="Amount">' +
+        '<input class="f un g-u" type="text" list="units" maxlength="12" placeholder="Unit" value="' + esc(g.u) + '" aria-label="Unit">' +
+        '<input class="f co g-c num" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Cost ₱" value="' + esc(g.c) + '" aria-label="Cost in pesos"></div></div>';
+    }).join('');
+    paintCost();
+  }
+  function readIngs() {
+    var out = [];
+    $('ings').querySelectorAll('.ing').forEach(function (r) {
+      out.push({ n: r.querySelector('.g-n').value.trim(), a: r.querySelector('.g-a').value, u: r.querySelector('.g-u').value.trim(), c: r.querySelector('.g-c').value });
+    });
+    return out;
+  }
+  function paintCost() {
+    var cost = 0; readIngs().forEach(function (g) { cost += num(g.c); });
+    var price = ed.itemId && ed.size ? priceFor({ itemId: ed.itemId, size: ed.size }) : null;
+    var t = cost ? 'Total cost <b class="num">' + D.peso(cost) + '</b>' : 'Enter the cost of each ingredient to see the total cost.';
+    if (cost && price) t += ' · Selling price <b class="num">' + D.peso(price) + '</b> · Margin <b class="num">' + D.peso(price - cost) + '</b>';
+    $('costline').innerHTML = t;
+  }
+  function openEdit(id) {
+    if (id) { ed = D.clone(R.recipes.filter(function (x) { return x.id === id; })[0]); isNew = false; }
+    else { ed = { id: D.uid('rec'), name: '', itemId: '', size: '', ingredients: [{ n: '', a: '', u: '', c: '' }], steps: '', notes: '' }; isNew = true; }
+    $('editTitle').textContent = isNew ? 'Add recipe' : 'Edit recipe';
+    $('rName').value = ed.name; $('rSteps').value = ed.steps || ''; $('rNotes').value = ed.notes || '';
+    $('delBtn').style.display = isNew ? 'none' : '';
+    paintItemSelect(); paintSize(); paintIngs(); show('edit');
+  }
+  $('rItem').onchange = function () {
+    ed.itemId = $('rItem').value; ed.size = '';
+    var it = ed.itemId ? D.item(ed.itemId) : null;
+    if (it && !$('rName').value.trim()) $('rName').value = it.name;
+    paintSize(); paintCost();
+  };
+  $('addIng').onclick = function () { ed.ingredients = readIngs(); ed.ingredients.push({ n: '', a: '', u: '', c: '' }); paintIngs(); };
+  $('ings').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-rm]'); if (!b) return;
+    ed.ingredients = readIngs(); ed.ingredients.splice(+b.getAttribute('data-rm'), 1); paintIngs();
+  });
+  $('ings').addEventListener('input', paintCost);
+  $('saveBtn').onclick = function () {
+    var name = $('rName').value.trim();
+    if (!name) { D.toast('Enter a name'); $('rName').focus(); return; }
+    ed.name = name; ed.itemId = $('rItem').value; ed.size = $('rSize').value.trim();
+    ed.ingredients = readIngs().filter(function (g) { return g.n || g.a !== '' || g.c !== ''; });
+    ed.steps = $('rSteps').value.trim(); ed.notes = $('rNotes').value.trim();
+    var idx = -1; R.recipes.forEach(function (x, n) { if (x.id === ed.id) idx = n; });
+    if (idx === -1) R.recipes.push(ed); else R.recipes[idx] = ed;
+    persist('Saved'); openView(ed.id);
+  };
+  $('delBtn').onclick = function () {
+    if (!confirm('Delete "' + ed.name + '"?')) return;
+    R.recipes = R.recipes.filter(function (x) { return x.id !== ed.id; }); D.getRecipes().recipes = R.recipes;
+    persist('Deleted'); show('list');
+  };
+
+  /* ---------- data ---------- */
+  function paintData() { $('stat').textContent = R.recipes.length + (R.recipes.length === 1 ? ' recipe' : ' recipes'); }
+  $('backup').onclick = function () { D.download('marina-bays-recipes-' + D.todayPH() + '.json', JSON.stringify(R)); D.toast('Backup saved'); };
+  $('restore').onclick = function () { $('file').click(); };
+  $('file').onchange = function (e) {
+    var f = e.target.files[0]; if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () {
+      try {
+        var data = JSON.parse(rd.result);
+        if (!data || !Array.isArray(data.recipes)) throw 0;
+        if (confirm('Replace the current recipes with this backup (' + data.recipes.length + ' recipes)?')) {
+          D.setRecipes(data); R = D.getRecipes(); paintData(); D.toast('Recipes restored');
+        }
+      } catch (err) { alert('That file is not a recipes backup.'); }
+      $('file').value = '';
+    };
+    rd.readAsText(f);
+  };
+  $('csv').onclick = function () {
+    function q(s) { return '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"'; }
+    var lines = ['Recipe,Menu item,Size,Ingredient,Amount,Unit,Cost'];
+    R.recipes.forEach(function (r) {
+      var it = linkedItem(r);
+      (r.ingredients || []).forEach(function (g) { lines.push([q(r.name), q(it ? it.name : ''), q(r.size), q(g.n), g.a, q(g.u), g.c].join(',')); });
+    });
+    D.download('marina-bays-recipes.csv', lines.join('\n'), 'text/csv'); D.toast('CSV saved');
+  };
+
+  paintList();
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>

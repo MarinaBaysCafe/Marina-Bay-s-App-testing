@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="security.js"></script>
+<meta name="robots" content="noindex, nofollow">
+<meta name="author" content="Marina Bay's Cafe">
+<meta name="copyright" content="Copyright 2026 Marina Bay's Cafe. All rights reserved.">
+<title>Security | Marina Bay's Cafe</title>
+<meta name="theme-color" content="#0d3a4e">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/counter-apple-touch-icon.png">
+<link rel="stylesheet" href="app.css">
+<style>
+  .pin-field { letter-spacing: 6px; font-size: 20px; }
+  .pin-field::placeholder { letter-spacing: normal; font-size: 15px; }
+  .code { margin: 12px 16px; padding: 16px; border: 1.5px dashed var(--teal); border-radius: 6px; text-align: center; font: 650 22px/1.2 "Courier New", Courier, monospace; letter-spacing: 2px; user-select: all; }
+  .msg { padding: 10px 16px; font-size: 14px; color: var(--bad); min-height: 20px; }
+  .msg.ok { color: var(--teal); }
+  .about { padding: 12px 16px 24px; font-size: 13px; color: var(--muted); }
+  .about p { margin: 0 0 8px; }
+</style>
+<link rel="stylesheet" href="wide.css">
+<link rel="stylesheet" href="brand.css">
+</head>
+<body class="pg-narrow">
+<div class="app">
+  <div class="top">
+    <a href="index.html" aria-label="Home" style="display:flex"><img src="icons/logo-64.png" alt=""></a>
+    <div><b>Marina Bay's Cafe</b><span class="sub">Security</span></div>
+    <nav class="apps" aria-label="Apps"><a href="index.html">All apps</a></nav>
+  </div>
+
+  <main id="main">
+    <!-- PIN is off -->
+    <section class="view" id="v-off">
+      <div class="sect">PIN lock is off</div>
+      <p class="sub-note">Anyone who opens the apps on this device can see and change everything. A PIN asks for 4 to 6 digits before the apps open.</p>
+      <p class="help" id="noHash" hidden>A PIN can only be set when the app is opened from its https link (your GitHub Pages address).</p>
+      <div class="frow"><label for="newPin">New PIN</label><input class="field pin-field" id="newPin" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" placeholder="4 to 6 digits"></div>
+      <div class="frow"><label for="newPin2">Repeat PIN</label><input class="field pin-field" id="newPin2" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></div>
+      <div class="msg" id="offMsg"></div>
+      <div class="actions"><button class="primary" id="turnOn">Turn on PIN lock</button></div>
+    </section>
+
+    <!-- recovery code, shown once -->
+    <section class="view" id="v-code">
+      <div class="sect">Your recovery code</div>
+      <p class="sub-note">Write this code on paper and keep it somewhere safe. It is shown only once. If you forget the PIN, this code is the only way to reset it.</p>
+      <div class="code" id="codeBox"></div>
+      <div class="actions"><button class="primary" id="gotCode">I wrote it down</button></div>
+    </section>
+
+    <!-- PIN is on -->
+    <section class="view" id="v-on">
+      <div class="sect">PIN lock is on</div>
+      <div class="actions" style="padding-top:4px"><button class="secondary" id="lockNow">Lock now</button></div>
+      <div class="frow"><label for="auto">Lock after</label>
+        <select class="field" id="auto">
+          <option value="1">1 minute of no use</option><option value="5">5 minutes of no use</option><option value="10">10 minutes of no use</option>
+          <option value="30">30 minutes of no use</option><option value="0">Only when the app is closed</option>
+        </select></div>
+
+      <div class="sect">Change PIN</div>
+      <div class="frow"><label for="curPin">Current PIN</label><input class="field pin-field" id="curPin" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password"></div>
+      <div class="frow"><label for="chPin">New PIN</label><input class="field pin-field" id="chPin" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></div>
+      <div class="frow"><label for="chPin2">Repeat new PIN</label><input class="field pin-field" id="chPin2" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></div>
+      <div class="msg" id="chMsg"></div>
+      <div class="actions"><button class="primary" id="changeBtn">Change PIN</button></div>
+
+      <div class="sect">Turn off the lock</div>
+      <div class="frow"><label for="offPin">Current PIN</label><input class="field pin-field" id="offPin" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password"></div>
+      <div class="msg" id="rmMsg"></div>
+      <div class="actions"><button class="text-btn danger" id="removeBtn">Turn off PIN lock</button></div>
+    </section>
+
+    <div class="sect">What this protects</div>
+    <div class="about">
+      <p>The PIN keeps people out of the apps on this device. It does not scramble the records saved in the browser, and it does not stop someone from reading the website's files. Each phone has its own PIN.</p>
+      <p>Never share the recovery code. Anyone who has it can remove the PIN.</p>
+    </div>
+
+    <div class="sect">Copyright</div>
+    <div class="about">
+      <p>Copyright &copy; 2026 Marina Bay's Cafe. All rights reserved.</p>
+      <p>The apps, the code, and the menu data are private to Marina Bay's Cafe. Copying, changing, or sharing them without written permission is not allowed. See the LICENSE file in the project folder.</p>
+      <p>The only outside code is the Firebase library from Google, used for cloud sync. RawBT, if used for printing, is a separate app by its own maker.</p>
+    </div>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="app-data.js"></script>
+<script>
+(function () {
+  var S = window.MBSecurity, D = window.MBData, $ = function (id) { return document.getElementById(id); };
+  var showCode = false;
+  function digits(v) { return /^\d{4,6}$/.test(v); }
+  function msg(id, text, ok) { var m = $(id); m.textContent = text || ''; m.className = 'msg' + (ok ? ' ok' : ''); }
+
+  function paint() {
+    var on = S.enabled();
+    $('v-code').classList.toggle('on', showCode);
+    $('v-off').classList.toggle('on', !on && !showCode);
+    $('v-on').classList.toggle('on', on && !showCode);
+    $('noHash').hidden = S.canHash();
+    $('auto').value = String(S.auto() === undefined ? 10 : S.auto());
+    if (!$('auto').value) $('auto').value = '10';
+  }
+
+  $('turnOn').onclick = async function () {
+    var a = $('newPin').value, b = $('newPin2').value;
+    if (!digits(a)) { msg('offMsg', 'The PIN must be 4 to 6 digits.'); return; }
+    if (a !== b) { msg('offMsg', 'The two PINs do not match.'); return; }
+    try {
+      $('codeBox').textContent = await S.setPin(a);
+      $('newPin').value = ''; $('newPin2').value = ''; msg('offMsg', '');
+      showCode = true; paint(); window.scrollTo(0, 0);
+    } catch (e) { msg('offMsg', e.message || 'Could not set the PIN.'); }
+  };
+  $('gotCode').onclick = function () { $('codeBox').textContent = ''; showCode = false; paint(); D.toast('PIN lock is on'); };
+  $('lockNow').onclick = function () { S.lockNow(); };
+  $('auto').onchange = function () { S.setAuto($('auto').value); D.toast('Saved'); };
+
+  $('changeBtn').onclick = async function () {
+    var cur = $('curPin').value, a = $('chPin').value, b = $('chPin2').value;
+    if (!(await S.verify(cur))) { msg('chMsg', 'The current PIN is not right.'); return; }
+    if (!digits(a)) { msg('chMsg', 'The new PIN must be 4 to 6 digits.'); return; }
+    if (a !== b) { msg('chMsg', 'The new PINs do not match.'); return; }
+    try {
+      $('codeBox').textContent = await S.setPin(a);
+      ['curPin', 'chPin', 'chPin2'].forEach(function (i) { $(i).value = ''; }); msg('chMsg', '');
+      showCode = true; paint(); window.scrollTo(0, 0);
+    } catch (e) { msg('chMsg', e.message || 'Could not change the PIN.'); }
+  };
+  $('removeBtn').onclick = async function () {
+    if (!(await S.verify($('offPin').value))) { msg('rmMsg', 'The current PIN is not right.'); return; }
+    if (!confirm('Turn off the PIN lock on this device?')) return;
+    S.removePin(); $('offPin').value = ''; msg('rmMsg', ''); paint(); D.toast('PIN lock is off');
+  };
+
+  if (/[?&]new=1/.test(location.search)) msg('offMsg', 'The old PIN was reset. Set a new PIN below.', true);
+  paint();
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<!-- Copyright (c) 2026 Marina Bay's Cafe. All rights reserved. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="security.js"></script>
+<script src="firebase-config.js"></script>
+<script src="cloud.js" data-uses="menu"></script>
+<meta name="robots" content="noindex, nofollow">
+<meta name="author" content="Marina Bay's Cafe">
+<meta name="copyright" content="Copyright 2026 Marina Bay's Cafe. All rights reserved.">
+<title>Menu editor | Marina Bay's Cafe</title>
+<meta name="theme-color" content="#0d3a4e">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/counter-apple-touch-icon.png">
+<link rel="stylesheet" href="app.css">
+<style>
+  .tabs { grid-template-columns: repeat(4, 1fr); }
+  .pick { padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  .pick select { width: 100%; height: 42px; border: 1.5px solid #c9c1b5; border-radius: 6px; padding: 0 10px; font: inherit; background: #fff; color: var(--ink); }
+  .movers { display: flex; gap: 4px; }
+  .movers button { width: 36px; height: 36px; }
+  .grp-title { padding: 12px 16px 4px; font-size: 13px; font-weight: 650; color: var(--muted); }
+  .check-list .check { min-height: 44px; }
+</style>
+<link rel="stylesheet" href="wide.css">
+<link rel="stylesheet" href="brand.css">
+</head>
+<body class="pg-menu">
+<div class="app">
+  <div class="top">
+    <a href="index.html" aria-label="Home" style="display:flex"><img src="icons/logo-64.png" alt=""></a>
+    <div><b>Marina Bay's Cafe</b><span class="sub">Menu editor</span></div>
+    <nav class="apps" aria-label="Apps"><a href="pos.html">POS</a><a href="index.html">All apps</a></nav>
+  </div>
+
+  <main id="main">
+    <!-- ITEMS -->
+    <section class="view on" id="v-items">
+      <div class="pick"><select id="catSel" aria-label="Show items from"></select></div>
+      <div id="itemList"></div>
+      <button class="add-btn" id="addItem">Add item</button>
+    </section>
+
+    <!-- ITEM EDIT -->
+    <section class="view" id="v-item">
+      <div class="editbar"><button class="icon-btn" data-back="items" aria-label="Back">&#8249;</button><b id="itemTitle">Item</b></div>
+      <div class="frow"><label for="iName">Name</label><input class="field" id="iName" type="text" maxlength="50" autocomplete="off"></div>
+      <div class="frow"><label for="iDesc">Description</label><input class="field" id="iDesc" type="text" maxlength="90" placeholder="Optional" autocomplete="off"></div>
+      <div class="frow"><label for="iCat">Section</label><select class="field" id="iCat"></select></div>
+      <div class="sect" style="padding-bottom:2px">Sizes and prices</div>
+      <div id="optRows"></div>
+      <div style="padding:10px 16px"><button class="small-btn" id="addOpt">+ Add size</button></div>
+      <label class="check"><input type="checkbox" id="iBest"> Best seller</label>
+      <label class="check"><input type="checkbox" id="iSold"> Sold out (cannot be ordered)</label>
+      <label class="check"><input type="checkbox" id="iCheck"> Price needs checking</label>
+      <div class="block"><label for="iNote">Notes</label><small>Only shown here, for you and the staff who edit the menu.</small><textarea class="field" id="iNote" rows="2" maxlength="200"></textarea></div>
+      <div class="actions"><button class="primary" id="saveItem">Save</button><button class="text-btn danger" id="delItem">Delete</button></div>
+    </section>
+
+    <!-- SECTIONS -->
+    <section class="view" id="v-cats">
+      <div class="sub-note" style="padding-top:12px">The order here is the order of the buttons in the point of sale.</div>
+      <div id="catList"></div>
+      <button class="add-btn" id="addCat">Add section</button>
+    </section>
+
+    <!-- SECTION EDIT -->
+    <section class="view" id="v-cat">
+      <div class="editbar"><button class="icon-btn" data-back="cats" aria-label="Back">&#8249;</button><b id="catTitle">Section</b></div>
+      <div class="frow"><label for="cName">Name</label><input class="field" id="cName" type="text" maxlength="40" autocomplete="off"></div>
+      <div class="frow"><label for="cGroup">Group</label><input class="field" id="cGroup" type="text" list="groups" maxlength="20" placeholder="Drinks, Food..." autocomplete="off"><datalist id="groups"><option value="Drinks"><option value="Food"></datalist></div>
+      <div class="frow"><label for="cNote">Note</label><input class="field" id="cNote" type="text" maxlength="50" placeholder="Optional" autocomplete="off"></div>
+      <div class="frow"><label for="cLid">Lid</label><select class="field" id="cLid"><option value="flat">Flat lid</option><option value="dome">Dome lid (round, frappe)</option><option value="none">No lid (food)</option></select></div>
+      <div class="block"><label for="cSizes">Usual sizes</label><small>Separate with commas. New items in this section start with these sizes.</small><input class="field" id="cSizes" type="text" placeholder="16 oz iced, 22 oz iced" autocomplete="off"></div>
+      <div class="actions"><button class="primary" id="saveCat">Save</button><button class="text-btn danger" id="delCat">Delete</button></div>
+    </section>
+
+    <!-- ADD-ONS -->
+    <section class="view" id="v-addons">
+      <div class="sub-note" style="padding-top:12px">Add-ons are extras like the Ship Upgrades. Each group is offered on the sections you pick.</div>
+      <div id="addonList"></div>
+      <button class="add-btn" id="addAddon">Add group</button>
+    </section>
+
+    <!-- ADD-ON EDIT -->
+    <section class="view" id="v-addon">
+      <div class="editbar"><button class="icon-btn" data-back="addons" aria-label="Back">&#8249;</button><b id="addonTitle">Add-on group</b></div>
+      <div class="frow"><label for="aName">Group name</label><input class="field" id="aName" type="text" maxlength="40" autocomplete="off"></div>
+      <div class="sect" style="padding-bottom:2px">Offered on</div>
+      <div class="check-list" id="aCats"></div>
+      <div class="sect" style="padding-bottom:2px">Extras</div>
+      <div id="aRows"></div>
+      <div style="padding:10px 16px"><button class="small-btn" id="addExtra">+ Add extra</button></div>
+      <div class="actions"><button class="primary" id="saveAddon">Save</button><button class="text-btn danger" id="delAddon">Delete</button></div>
+    </section>
+
+    <!-- DATA -->
+    <section class="view" id="v-data">
+      <div class="prow" style="cursor:default"><div class="what"><b id="statMenu"></b><span class="s">The starting menu comes from menu-default.js. Changes made here are saved on this device.</span></div></div>
+      <button class="prow" id="backup"><div class="what"><b>Save a backup</b><span class="s">Downloads the whole menu as a file</span></div><i>&#8250;</i></button>
+      <button class="prow" id="restore"><div class="what"><b>Restore from a backup</b><span class="s">Replaces the menu with a saved backup file</span></div><i>&#8250;</i></button>
+      <input type="file" id="file" accept=".json,application/json" hidden>
+      <button class="prow" id="csv"><div class="what"><b>Export prices (CSV)</b><span class="s">One row per item and size, for a spreadsheet</span></div><i>&#8250;</i></button>
+      <button class="prow" id="reset"><div class="what"><b style="color:var(--bad)">Reset to the starting menu</b><span class="s">Removes all your menu changes on this device</span></div><i>&#8250;</i></button>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button class="tab on" data-v="items">Items</button>
+    <button class="tab" data-v="cats">Sections</button>
+    <button class="tab" data-v="addons">Add-ons</button>
+    <button class="tab" data-v="data">Data</button>
+  </nav>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="menu-default.js"></script>
+<script src="app-data.js"></script>
+<script>
+(function () {
+  var D = window.MBData, esc = D.esc, $ = function (id) { return document.getElementById(id); };
+  var M = D.getMenu();
+  function persist(msg) { if (!D.saveMenu()) D.toast('Could not save. Storage may be full.'); else if (msg) D.toast(msg); }
+  function num(v) { var n = parseFloat(v); return isNaN(n) ? null : n; }
+
+  /* ---------- tabs ---------- */
+  var TABMAP = { items: 'items', item: 'items', cats: 'cats', cat: 'cats', addons: 'addons', addon: 'addons', data: 'data' };
+  function show(v) {
+    Object.keys(TABMAP).forEach(function (n) { $('v-' + n).classList.toggle('on', n === v); });
+    document.querySelectorAll('.tab').forEach(function (t) { t.classList.toggle('on', t.getAttribute('data-v') === TABMAP[v]); });
+    $('main').scrollTop = 0;
+    if (v === 'items') paintItems();
+    if (v === 'cats') paintCats();
+    if (v === 'addons') paintAddons();
+    if (v === 'data') paintData();
+  }
+  document.querySelectorAll('.tab').forEach(function (t) { t.onclick = function () { show(t.getAttribute('data-v')); }; });
+  document.querySelectorAll('[data-back]').forEach(function (b) { b.onclick = function () { show(b.getAttribute('data-back')); }; });
+
+  /* ---------- items ---------- */
+  var selCat = 'all';
+  function checkCount() { return M.items.filter(function (i) { return i.check; }).length; }
+  function paintSel() {
+    var h = '<option value="all">All items (' + M.items.length + ')</option>';
+    var n = checkCount(); if (n) h += '<option value="check">Prices to check (' + n + ')</option>';
+    M.categories.forEach(function (c) { h += '<option value="' + esc(c.id) + '">' + esc(c.name) + ' (' + D.itemsIn(c.id).length + ')</option>'; });
+    $('catSel').innerHTML = h;
+    if (selCat !== 'all' && selCat !== 'check' && !D.cat(selCat)) selCat = 'all';
+    if (selCat === 'check' && !n) selCat = 'all';
+    $('catSel').value = selCat;
+  }
+  $('catSel').onchange = function () { selCat = $('catSel').value; paintItems(); };
+  function paintItems() {
+    paintSel();
+    var list = selCat === 'all' ? M.items : selCat === 'check' ? M.items.filter(function (i) { return i.check; }) : D.itemsIn(selCat);
+    var h = '';
+    list.forEach(function (it) {
+      var c = D.cat(it.cat);
+      h += '<button class="prow" data-id="' + esc(it.id) + '"><div class="what"><b>' + esc(it.name) +
+        (it.best ? '<span class="badge best">Best</span>' : '') + (it.soldOut ? '<span class="badge">Sold out</span>' : '') +
+        (it.check ? '<span class="badge warn">Check price</span>' : '') + '</b><span class="s">' +
+        esc((it.desc ? it.desc + ' · ' : '') + (selCat === 'all' || selCat === 'check' ? (c ? c.name : 'No section') : '')) + '</span></div><div class="r num">' +
+        D.priceText(it) + '</div></button>';
+    });
+    $('itemList').innerHTML = h || '<div class="empty">No items here yet.</div>';
+  }
+  $('itemList').addEventListener('click', function (e) { var b = e.target.closest('button[data-id]'); if (b) openItem(b.getAttribute('data-id')); });
+  $('addItem').onclick = function () { openItem(null); };
+
+  var ed = null, isNew = false;
+  function blankOptions(catId) {
+    var c = D.cat(catId), sizes = (c && c.sizes && c.sizes.length) ? c.sizes : ['Regular'];
+    return sizes.map(function (s) { return { label: s, price: '' }; });
+  }
+  function openItem(id) {
+    if (id) { ed = D.clone(D.item(id)); isNew = false; }
+    else {
+      if (!M.categories.length) { D.toast('Add a section first'); return; }
+      var cid = D.cat(selCat) ? selCat : M.categories[0].id;
+      ed = { id: D.uid('item'), cat: cid, name: '', desc: '', best: false, soldOut: false, check: false, note: '', options: blankOptions(cid) };
+      isNew = true;
+    }
+    $('itemTitle').textContent = isNew ? 'Add item' : 'Edit item';
+    $('iName').value = ed.name; $('iDesc').value = ed.desc || '';
+    $('iCat').innerHTML = M.categories.map(function (c) { return '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>'; }).join('');
+    $('iCat').value = ed.cat;
+    $('iBest').checked = !!ed.best; $('iSold').checked = !!ed.soldOut; $('iCheck').checked = !!ed.check; $('iNote').value = ed.note || '';
+    $('delItem').style.display = isNew ? 'none' : '';
+    paintOpts(); show('item');
+  }
+  function paintOpts() {
+    $('optRows').innerHTML = ed.options.map(function (o, i) {
+      return '<div class="mini-row"><input class="field o-l" type="text" maxlength="40" placeholder="Size or version" value="' + esc(o.label) + '" aria-label="Size name">' +
+        '<input class="field n o-p num" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Price" value="' + esc(o.price) + '" aria-label="Price">' +
+        '<button class="x" data-rm="' + i + '" aria-label="Remove size">&times;</button></div>';
+    }).join('');
+  }
+  function readOpts() {
+    var rows = $('optRows').querySelectorAll('.mini-row'), out = [];
+    rows.forEach(function (r) { out.push({ label: r.querySelector('.o-l').value.trim(), price: r.querySelector('.o-p').value }); });
+    return out;
+  }
+  $('optRows').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-rm]'); if (!b) return;
+    ed.options = readOpts(); ed.options.splice(+b.getAttribute('data-rm'), 1); paintOpts();
+  });
+  $('addOpt').onclick = function () { ed.options = readOpts(); ed.options.push({ label: '', price: '' }); paintOpts(); };
+  $('iCat').onchange = function () {
+    var cur = readOpts(), untouched = cur.every(function (o) { return o.price === ''; });
+    ed.cat = $('iCat').value;
+    if (isNew && untouched) { ed.options = blankOptions(ed.cat); paintOpts(); }
+  };
+  $('saveItem').onclick = function () {
+    var name = $('iName').value.trim();
+    if (!name) { D.toast('Enter a name'); $('iName').focus(); return; }
+    var opts = readOpts().filter(function (o) { return o.price !== '' || o.label; }), clean = [];
+    for (var i = 0; i < opts.length; i++) {
+      var p = num(opts[i].price);
+      if (p === null || p < 0) { D.toast('Enter a price for every size'); return; }
+      clean.push({ label: opts[i].label || (opts.length === 1 ? 'Regular' : 'Size ' + (i + 1)), price: p });
+    }
+    if (!clean.length) { D.toast('Add at least one price'); return; }
+    ed.name = name; ed.desc = $('iDesc').value.trim(); ed.cat = $('iCat').value; ed.options = clean;
+    ed.best = $('iBest').checked; ed.soldOut = $('iSold').checked; ed.check = $('iCheck').checked; ed.note = $('iNote').value.trim();
+    var idx = -1; M.items.forEach(function (x, n) { if (x.id === ed.id) idx = n; });
+    if (idx === -1) M.items.push(ed); else M.items[idx] = ed;
+    persist('Saved'); selCat = ed.cat; show('items');
+  };
+  $('delItem').onclick = function () {
+    if (!confirm('Delete "' + ed.name + '"?')) return;
+    M.items = M.items.filter(function (x) { return x.id !== ed.id; });
+    D.getMenu().items = M.items; persist('Deleted'); show('items');
+  };
+
+  /* ---------- sections ---------- */
+  function paintCats() {
+    var h = '';
+    M.categories.forEach(function (c, i) {
+      h += '<div class="prow" data-id="' + esc(c.id) + '"><div class="what"><b>' + esc(c.name) + '</b><span class="s">' + esc((c.group || '') + ' · ' + D.itemsIn(c.id).length + ' items') +
+        '</span></div><div class="movers"><button class="small-btn" data-up="' + i + '" aria-label="Move up"' + (i === 0 ? ' disabled' : '') + '>&uarr;</button>' +
+        '<button class="small-btn" data-down="' + i + '" aria-label="Move down"' + (i === M.categories.length - 1 ? ' disabled' : '') + '>&darr;</button></div></div>';
+    });
+    $('catList').innerHTML = h || '<div class="empty">No sections yet. Add one to start building the menu.</div>';
+  }
+  $('catList').addEventListener('click', function (e) {
+    var up = e.target.closest('button[data-up]'), dn = e.target.closest('button[data-down]');
+    if (up || dn) {
+      var i = +(up || dn).getAttribute(up ? 'data-up' : 'data-down'), j = up ? i - 1 : i + 1;
+      var t = M.categories[i]; M.categories[i] = M.categories[j]; M.categories[j] = t;
+      persist(); paintCats(); return;
+    }
+    var r = e.target.closest('[data-id]'); if (r) openCat(r.getAttribute('data-id'));
+  });
+  $('addCat').onclick = function () { openCat(null); };
+  var cEd = null, cNew = false;
+  function openCat(id) {
+    if (id) { cEd = D.clone(D.cat(id)); cNew = false; }
+    else { cEd = { id: D.uid('cat'), name: '', group: 'Drinks', note: '', sizes: [] }; cNew = true; }
+    $('catTitle').textContent = cNew ? 'Add section' : 'Edit section';
+    $('cName').value = cEd.name; $('cGroup').value = cEd.group || ''; $('cNote').value = cEd.note || ''; $('cSizes').value = (cEd.sizes || []).join(', ');
+    $('cLid').value = cEd.lid || (/food/i.test(cEd.group || '') ? 'none' : /blend|frappe/i.test((cEd.name || '') + ' ' + (cEd.note || '')) ? 'dome' : 'flat');
+    $('delCat').style.display = cNew ? 'none' : '';
+    show('cat');
+  }
+  $('saveCat').onclick = function () {
+    var name = $('cName').value.trim();
+    if (!name) { D.toast('Enter a name'); $('cName').focus(); return; }
+    cEd.name = name; cEd.group = $('cGroup').value.trim(); cEd.note = $('cNote').value.trim();
+    cEd.lid = $('cLid').value;
+    cEd.sizes = $('cSizes').value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+    var idx = -1; M.categories.forEach(function (x, n) { if (x.id === cEd.id) idx = n; });
+    if (idx === -1) M.categories.push(cEd); else M.categories[idx] = cEd;
+    persist('Saved'); show('cats');
+  };
+  $('delCat').onclick = function () {
+    var n = D.itemsIn(cEd.id).length;
+    if (!confirm('Delete "' + cEd.name + '"' + (n ? ' and its ' + n + ' items' : '') + '?')) return;
+    M.categories = M.categories.filter(function (c) { return c.id !== cEd.id; });
+    M.items = M.items.filter(function (i) { return i.cat !== cEd.id; });
+    M.addonGroups.forEach(function (g) { g.cats = (g.cats || []).filter(function (c) { return c !== cEd.id; }); });
+    D.getMenu().categories = M.categories; D.getMenu().items = M.items;
+    persist('Deleted'); show('cats');
+  };
+
+  /* ---------- add-ons ---------- */
+  function paintAddons() {
+    var h = '';
+    M.addonGroups.forEach(function (g) {
+      h += '<button class="prow" data-id="' + esc(g.id) + '"><div class="what"><b>' + esc(g.name) + '</b><span class="s">' +
+        (g.cats || []).length + ' sections · ' + (g.items || []).length + ' extras</span></div><i>&#8250;</i></button>';
+    });
+    $('addonList').innerHTML = h || '<div class="empty">No add-on groups yet.</div>';
+  }
+  $('addonList').addEventListener('click', function (e) { var b = e.target.closest('button[data-id]'); if (b) openAddon(b.getAttribute('data-id')); });
+  $('addAddon').onclick = function () { openAddon(null); };
+  var aEd = null, aNew = false;
+  function openAddon(id) {
+    if (id) { aEd = D.clone(M.addonGroups.filter(function (g) { return g.id === id; })[0]); aNew = false; }
+    else { aEd = { id: D.uid('grp'), name: '', cats: [], items: [] }; aNew = true; }
+    $('addonTitle').textContent = aNew ? 'Add group' : 'Edit group';
+    $('aName').value = aEd.name;
+    var lastGroup = null, h = '';
+    M.categories.forEach(function (c) {
+      if (c.group !== lastGroup) { lastGroup = c.group; h += '<div class="grp-title">' + esc(c.group || 'Other') + '</div>'; }
+      h += '<label class="check"><input type="checkbox" data-c="' + esc(c.id) + '"' + ((aEd.cats || []).indexOf(c.id) !== -1 ? ' checked' : '') + '> ' + esc(c.name) + '</label>';
+    });
+    $('aCats').innerHTML = h || '<div class="empty">Add sections first.</div>';
+    $('delAddon').style.display = aNew ? 'none' : '';
+    paintExtras(); show('addon');
+  }
+  function paintExtras() {
+    $('aRows').innerHTML = (aEd.items || []).map(function (a, i) {
+      return '<div class="mini-row" data-id="' + esc(a.id) + '" data-desc="' + esc(a.desc || '') + '"><input class="field a-n" type="text" maxlength="40" placeholder="Name" value="' + esc(a.name) + '" aria-label="Name">' +
+        '<input class="field n a-p num" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Price" value="' + esc(a.price) + '" aria-label="Price">' +
+        '<button class="x" data-rm="' + i + '" aria-label="Remove">&times;</button></div>';
+    }).join('');
+  }
+  function readExtras() {
+    var out = [];
+    $('aRows').querySelectorAll('.mini-row').forEach(function (r) {
+      out.push({ id: r.getAttribute('data-id'), desc: r.getAttribute('data-desc') || '', name: r.querySelector('.a-n').value.trim(), price: r.querySelector('.a-p').value });
+    });
+    return out;
+  }
+  $('aRows').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-rm]'); if (!b) return;
+    aEd.items = readExtras(); aEd.items.splice(+b.getAttribute('data-rm'), 1); paintExtras();
+  });
+  $('addExtra').onclick = function () { aEd.items = readExtras(); aEd.items.push({ id: D.uid('ex'), name: '', desc: '', price: '' }); paintExtras(); };
+  $('saveAddon').onclick = function () {
+    var name = $('aName').value.trim();
+    if (!name) { D.toast('Enter a group name'); $('aName').focus(); return; }
+    var items = [], rows = readExtras().filter(function (r) { return r.name || r.price !== ''; });
+    for (var i = 0; i < rows.length; i++) {
+      var p = num(rows[i].price);
+      if (!rows[i].name || p === null || p < 0) { D.toast('Each extra needs a name and a price'); return; }
+      items.push({ id: rows[i].id, name: rows[i].name, desc: rows[i].desc, price: p });
+    }
+    aEd.name = name; aEd.items = items;
+    aEd.cats = [].slice.call($('aCats').querySelectorAll('input[data-c]')).filter(function (x) { return x.checked; }).map(function (x) { return x.getAttribute('data-c'); });
+    var idx = -1; M.addonGroups.forEach(function (x, n) { if (x.id === aEd.id) idx = n; });
+    if (idx === -1) M.addonGroups.push(aEd); else M.addonGroups[idx] = aEd;
+    persist('Saved'); show('addons');
+  };
+  $('delAddon').onclick = function () {
+    if (!confirm('Delete "' + aEd.name + '"?')) return;
+    M.addonGroups = M.addonGroups.filter(function (g) { return g.id !== aEd.id; });
+    D.getMenu().addonGroups = M.addonGroups; persist('Deleted'); show('addons');
+  };
+
+  /* ---------- data ---------- */
+  function paintData() { $('statMenu').textContent = M.categories.length + ' sections, ' + M.items.length + ' items, ' + M.addonGroups.length + ' add-on groups'; }
+  $('backup').onclick = function () { D.download('marina-bays-menu-' + D.todayPH() + '.json', JSON.stringify(M)); D.toast('Backup saved'); };
+  $('restore').onclick = function () { $('file').click(); };
+  $('file').onchange = function (e) {
+    var f = e.target.files[0]; if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () {
+      try {
+        var data = JSON.parse(rd.result);
+        if (!data || !Array.isArray(data.categories) || !Array.isArray(data.items)) throw 0;
+        if (confirm('Replace the current menu with this backup (' + data.items.length + ' items)?')) {
+          D.setMenu(data); M = D.getMenu(); selCat = 'all'; paintData(); D.toast('Menu restored');
+        }
+      } catch (err) { alert('That file is not a menu backup.'); }
+      $('file').value = '';
+    };
+    rd.readAsText(f);
+  };
+  $('csv').onclick = function () {
+    function q(s) { return '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"'; }
+    var lines = ['Section,Item,Description,Size,Price,Best seller,Sold out,Notes'];
+    M.items.forEach(function (it) {
+      var c = D.cat(it.cat);
+      it.options.forEach(function (o) { lines.push([q(c ? c.name : ''), q(it.name), q(it.desc), q(o.label), o.price, it.best ? 'yes' : '', it.soldOut ? 'yes' : '', q(it.note)].join(',')); });
+    });
+    D.download('marina-bays-menu.csv', lines.join('\n'), 'text/csv'); D.toast('CSV saved');
+  };
+  $('reset').onclick = function () {
+    if (confirm('Remove all menu changes on this device and go back to the starting menu?')) { M = D.resetMenu(); selCat = 'all'; paintData(); paintItems(); D.toast('Menu reset'); }
+  };
+
+  paintItems();
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>

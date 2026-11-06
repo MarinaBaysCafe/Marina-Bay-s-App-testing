@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="security.js"></script>
+<script src="firebase-config.js"></script>
+<script src="cloud.js" data-uses="config"></script>
+<title>Settings | Marina Bay's Cafe</title>
+<meta name="theme-color" content="#0d3a4e">
+<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="wide.css">
+<link rel="stylesheet" href="brand.css">
+<style>
+  .row { display: flex; gap: 8px; align-items: center; padding: 8px 16px; border-top: 1px solid var(--line); }
+  .row input { flex: 1; min-width: 0; }
+  .row input.n { max-width: 80px; flex: none; text-align: right; }
+  h3 { margin: 18px 16px 6px; font-size: 15px; }
+  .add, .rm { height: 38px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--line); background: #fff; font: inherit; cursor: pointer; }
+  .rm { color: var(--bad); }
+  .note { margin: 4px 16px; font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body class="pg-narrow">
+<div class="app">
+  <div class="top"><a href="index.html" class="icon-btn" aria-label="Back">&#8249;</a><b>Settings</b></div>
+  <h3>Receipts</h3>
+  <label class="row"><input type="checkbox" id="auto" style="flex:none"> Print the receipt automatically after charging</label>
+  <h3>Payment methods</h3>
+  <div class="note">Cash is always there. Add e-wallets or cards; they can be split with cash when charging.</div>
+  <div id="methods"></div><div class="row"><button class="add" id="addM">Add method</button></div>
+  <h3>Discounts</h3>
+  <div class="note">Shown as toggles when charging. Toggled discounts add up, and each can apply to the whole order or one item.</div>
+  <div id="discs"></div><div class="row"><button class="add" id="addD">Add discount</button></div>
+  <h3>Inventory units</h3>
+  <div id="units"></div><div class="row"><button class="add" id="addU">Add unit</button></div>
+  <h3>Activity log</h3>
+  <div class="note">Refunds, deletes, corrections and manual discounts, newest first. Kept on this phone only (last 500). There is one shared PIN, so "by" is the cashier of the open shift.</div>
+  <div id="audit"></div>
+  <h3>Reset settings</h3>
+  <div class="note">Resets only these settings (methods, discounts, units, auto-print) to the defaults. Sales, shifts, menu, inventory and recipes are never touched. Your current settings are kept so you can undo.</div>
+  <div class="row"><button class="rm" id="reset">Reset settings</button><button class="add" id="undo">Undo reset</button></div>
+</div>
+<script src="pos-config.js"></script>
+<script src="guard.js"></script>
+<script>
+(function () {
+  var C = MBConfig, $ = function (i) { return document.getElementById(i); };
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function paint() {
+    var g = C.get();
+    $('auto').checked = g.autoPrint;
+    $('methods').innerHTML = g.methods.map(function (m, i) {
+      return '<div class="row"><input data-k="m" data-i="' + i + '" value="' + esc(m.name) + '"' + (m.id === 'cash' ? ' disabled' : '') + '>' +
+        (m.id === 'cash' ? '' : '<button class="rm" data-rm="m' + i + '">Remove</button>') + '</div>';
+    }).join('');
+    $('discs').innerHTML = g.discounts.map(function (d, i) {
+      return '<div class="row"><input data-k="dn" data-i="' + i + '" value="' + esc(d.name) + '"><input class="n" data-k="dp" data-i="' + i + '" type="number" min="0" max="100" value="' + d.pct + '">%' +
+        '<button class="rm" data-rm="d' + i + '">Remove</button></div>';
+    }).join('');
+    $('units').innerHTML = g.units.map(function (u, i) {
+      return '<div class="row"><input data-k="u" data-i="' + i + '" value="' + esc(u) + '"><button class="rm" data-rm="u' + i + '">Remove</button></div>';
+    }).join('');
+  }
+  document.addEventListener('input', function (e) {
+    var k = e.target.getAttribute('data-k'), i = +e.target.getAttribute('data-i'), g = C.get();
+    if (e.target.id === 'auto') { g.autoPrint = e.target.checked; C.save(); return; }
+    if (!k) return;
+    if (k === 'm') g.methods[i].name = e.target.value;
+    else if (k === 'dn') g.discounts[i].name = e.target.value;
+    else if (k === 'dp') g.discounts[i].pct = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0));
+    else if (k === 'u') g.units[i] = e.target.value;
+    C.save();
+  });
+  document.addEventListener('click', function (e) {
+    var g = C.get(), t = e.target, rm = t.getAttribute && t.getAttribute('data-rm');
+    if (t.id === 'addM') { g.methods.push({ id: C.uid('pm'), name: 'New method', cash: false }); }
+    else if (t.id === 'addD') { g.discounts.push({ id: C.uid('d'), name: 'New discount', pct: 10 }); }
+    else if (t.id === 'addU') { g.units.push('unit'); }
+    else if (rm) { var i = +rm.slice(1); ({ m: g.methods, d: g.discounts, u: g.units })[rm[0]].splice(i, 1); }
+    else if (t.id === 'reset') { if (!confirm('Reset payment methods, discounts, units and auto-print to the defaults?\nSales and all other data stay as they are.')) return; C.resetSettings(); }
+    else if (t.id === 'undo') { if (!C.undoReset()) { alert('Nothing to undo.'); return; } }
+    else return;
+    C.save(); paint();
+  });
+  function paintAudit() {
+    var l = MBGuard.list(100);
+    $('audit').innerHTML = l.length ? l.map(function (x) {
+      var dt = new Date(x.t).toLocaleString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+      return '<div class="row" style="display:block"><b>' + esc(x.a) + '</b> <span style="color:var(--muted)">' + esc(dt) + '</span><div style="font-size:13px">' +
+        esc(x.d) + (x.by ? ' · by ' + esc(x.by) : '') + (x.pos ? ' · ' + esc(x.pos) : '') + (x.why ? ' · "' + esc(x.why) + '"' : '') + '</div></div>';
+    }).join('') : '<div class="note">Nothing logged yet.</div>';
+  }
+  paint(); paintAudit();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<!-- Copyright (c) 2026 Marina Bay's Cafe. All rights reserved. -->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="security.js"></script>
+<script src="firebase-config.js"></script>
+<script src="cloud.js" data-uses="sales,shifts,expenses,counter"></script>
+<meta name="robots" content="noindex, nofollow">
+<title>Analytics | Marina Bay's Cafe</title>
+<meta name="theme-color" content="#0d3a4e">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="stylesheet" href="app.css">
+<style>
+  .chips2 { display: flex; gap: 8px; padding: 12px 16px 4px; overflow-x: auto; }
+  .chips2 button { flex: none; border: 1.5px solid #c9c1b5; background: #fff; color: var(--ink); border-radius: 18px; font: inherit; font-size: 14px; padding: 7px 14px; cursor: pointer; }
+  .chips2 button.on { background: var(--teal); border-color: var(--teal); color: #fff; font-weight: 650; }
+  .daterow { display: flex; align-items: center; gap: 8px; padding: 6px 16px 4px; font-size: 14px; color: var(--muted); }
+  .daterow input { flex: 1; min-width: 0; height: 40px; border: 1.5px solid #c9c1b5; border-radius: 6px; padding: 0 8px; font: inherit; background: #fff; color: var(--ink); }
+  .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 16px 4px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 12px; background: #fff; }
+  .card small { display: block; font-size: 12px; color: var(--muted); }
+  .card b { display: block; font-size: 22px; font-weight: 700; margin: 2px 0; }
+  .card em { font-style: normal; font-size: 12px; color: var(--muted); }
+  .card em.up { color: #2f6b4f; } .card em.dn { color: var(--bad); }
+  .card.in b { color: var(--teal); } .card.out b { color: var(--spend); }
+  .box { margin: 4px 16px 6px; }
+  .box h3 { margin: 18px 0 2px; font-family: var(--serif); font-size: 17px; color: var(--harbor); }
+  .box .why { font-size: 13px; color: var(--muted); margin: 0 0 6px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin: 2px 0 4px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  svg.ch { width: 100%; height: auto; display: block; }
+  svg.ch text { font-family: inherit; font-size: 10px; fill: #52646c; }
+  .readout { min-height: 20px; font-size: 13px; color: var(--ink); padding: 2px 0 0; }
+  .hbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 6px 0; font-size: 14px; }
+  .hbar .t { height: 8px; border-radius: 4px; background: var(--soft); grid-column: 1 / 3; overflow: hidden; }
+  .hbar .t i { display: block; height: 100%; border-radius: 4px; }
+  .hbar span:last-child { text-align: right; }
+  .hbar small { color: var(--muted); }
+  table.dt { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.dt th, table.dt td { padding: 8px 4px; border-top: 1px solid var(--line); text-align: right; }
+  table.dt th:first-child, table.dt td:first-child { text-align: left; }
+  table.dt th { font-size: 12px; color: var(--muted); font-weight: 600; border-top: none; }
+  table.dt a { color: var(--teal); text-decoration: none; }
+  .neg { color: var(--bad); }
+  .note2 { padding: 10px 16px 24px; font-size: 12px; color: var(--muted); }
+  @media (min-width: 768px) { .cards { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+</style>
+<link rel="stylesheet" href="wide.css">
+<link rel="stylesheet" href="brand.css">
+</head>
+<body class="pg-narrow">
+<div class="app">
+  <div class="top">
+    <a href="index.html" aria-label="Home" style="display:flex"><img src="icons/logo-64.png" alt=""></a>
+    <div><b>Marina Bay's Cafe</b><span class="sub">Analytics</span></div>
+    <nav class="apps" aria-label="Apps"><a href="calendar.html">Calendar</a><a href="index.html">All apps</a></nav>
+  </div>
+  <main id="main">
+    <div class="chips2" id="chips">
+      <button data-r="7">7 days</button><button data-r="30" class="on">30 days</button><button data-r="m0">This month</button><button data-r="m1">Last month</button><button data-r="90">3 months</button><button data-r="all">All time</button><button data-r="c">Custom</button>
+    </div>
+    <div class="daterow" id="custom" hidden><input type="date" id="from"><span>to</span><input type="date" id="to"></div>
+    <div id="body"></div>
+    <p class="note2">Income is net sales (after discounts and refunds). Expenses are everything in the Expenses app, cash and online. Profit is income less expenses.</p>
+  </main>
+</div>
+<script src="menu-default.js"></script>
+<script src="inventory-default.js"></script>
+<script src="app-data.js"></script>
+<script src="shift-lib.js"></script>
+<script>
+(function () {
+  var D = window.MBData, S = window.MBShift, N = D.peso, esc = D.esc, $ = function (id) { return document.getElementById(id); };
+  var IN = '#0d3a4e', OUT = '#b08a57', PR = '#2a7f94';
+  var today = S.phDate(Date.now()), idx, range = '30', from, to;
+
+  function addDays(k, n) { var d = new Date(k + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+  function diffDays(a, b) { return Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 864e5); }
+  function dows(k) { return new Date(k + 'T00:00:00Z').getUTCDay(); }
+  function short(n) { n = Math.abs(n) >= 1000 ? (n / 1000).toFixed(n % 1000 ? 1 : 0).replace('.0', '') + 'k' : String(Math.round(n)); return n; }
+  function nice(max) { if (max <= 0) return 100; var p = Math.pow(10, Math.floor(Math.log10(max))), f = max / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; }
+  function dl(k) { return new Date(k + 'T00:00:00Z').toLocaleDateString('en-PH', { timeZone: 'UTC', month: 'short', day: 'numeric' }); }
+
+  function setRange() {
+    var t = new Date(today + 'T00:00:00Z'), y = t.getUTCFullYear(), m = t.getUTCMonth();
+    function mk(yy, mm) { return yy + '-' + (mm < 9 ? '0' : '') + (mm + 1) + '-01'; }
+    if (range === '7' || range === '30' || range === '90') { to = today; from = addDays(today, -(+range - 1)); }
+    else if (range === 'm0') { from = mk(y, m); to = today; }
+    else if (range === 'm1') { var pm = m ? m - 1 : 11, py = m ? y : y - 1; from = mk(py, pm); to = addDays(mk(y, m), -1); }
+    else if (range === 'all') { var ks = Object.keys(idx).sort(); from = ks[0] || today; to = today; }
+    else { from = $('from').value || addDays(today, -29); to = $('to').value || today; if (from > to) { var x = from; from = to; to = x; } }
+  }
+  function zero() { return { net: 0, exp: 0, orders: 0, cash: 0, ewallet: 0, drinks: 0 }; }
+  function add(t, x) { if (!x) return; t.net += x.net; t.exp += x.expCash + x.expOnline; t.orders += x.orders; t.cash += x.cash; t.ewallet += x.ewallet; t.drinks += x.drinks; }
+  function totals(a, b) { var t = zero(); for (var k = a; k <= b; k = addDays(k, 1)) add(t, idx[k]); return t; }
+  function pct(a, b) { return b ? (a - b) / Math.abs(b) * 100 : null; }
+
+  /* ---------- charts (plain SVG, no libraries) ---------- */
+  var charts = {};
+  function bars(id, rows, series, line) {
+    var W = 360, H = 190, L = 34, B = 22, T = 8, R = 6, max = 0, min = 0;
+    rows.forEach(function (r) { series.forEach(function (s) { max = Math.max(max, r[s.k]); }); if (line) { max = Math.max(max, r.profit); min = Math.min(min, r.profit); } });
+    var top = nice(max), bot = min < 0 ? -nice(-min) : 0, span = top - bot, pw = W - L - R, ph = H - T - B, gw = pw / Math.max(rows.length, 1);
+    function y(v) { return T + ph - (v - bot) / span * ph; }
+    var o = '<svg class="ch" viewBox="0 0 ' + W + ' ' + H + '" role="img">';
+    for (var i = 0; i <= 4; i++) { var v = bot + span * i / 4; o += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="#e4dfd7"/><text x="' + (L - 4) + '" y="' + (y(v) + 3) + '" text-anchor="end">' + (v < 0 ? '-' : '') + short(v) + '</text>'; }
+    var bw = Math.min(18, gw * 0.8 / series.length), step = Math.ceil(rows.length / 8);
+    rows.forEach(function (r, n) {
+      var gx = L + gw * n + gw / 2 - bw * series.length / 2;
+      series.forEach(function (s, j) { var yv = y(Math.max(r[s.k], 0)), y0 = y(0); o += '<rect x="' + (gx + bw * j) + '" y="' + yv + '" width="' + (bw - 1) + '" height="' + Math.max(0, y0 - yv) + '" fill="' + s.c + '" rx="1.5"/>'; });
+      if (n % step === 0) o += '<text x="' + (L + gw * n + gw / 2) + '" y="' + (H - 6) + '" text-anchor="middle">' + esc(r.label) + '</text>';
+      o += '<rect data-c="' + id + '" data-n="' + n + '" x="' + (L + gw * n) + '" y="' + T + '" width="' + gw + '" height="' + ph + '" fill="transparent"/>';
+    });
+    if (line) {
+      var pts = rows.map(function (r, n) { return (L + gw * n + gw / 2).toFixed(1) + ',' + y(r.profit).toFixed(1); }).join(' ');
+      o += '<polyline points="' + pts + '" fill="none" stroke="' + PR + '" stroke-width="2" stroke-linejoin="round"/>';
+      if (rows.length <= 40) rows.forEach(function (r, n) { o += '<circle cx="' + (L + gw * n + gw / 2) + '" cy="' + y(r.profit) + '" r="2.4" fill="' + PR + '"/>'; });
+    }
+    charts[id] = { rows: rows, series: series, line: line };
+    return o + '</svg><div class="readout" id="ro-' + id + '">Tap a bar for the numbers.</div>';
+  }
+  function lines(id, rows) {
+    var W = 360, H = 170, L = 34, B = 22, T = 8, R = 8, max = 0;
+    rows.forEach(function (r) { max = Math.max(max, r.cin, r.cout); });
+    var top = nice(max), pw = W - L - R, ph = H - T - B, n1 = Math.max(rows.length - 1, 1);
+    function y(v) { return T + ph - v / top * ph; } function x(n) { return L + pw * n / n1; }
+    var o = '<svg class="ch" viewBox="0 0 ' + W + ' ' + H + '" role="img">';
+    for (var i = 0; i <= 4; i++) { var v = top * i / 4; o += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="#e4dfd7"/><text x="' + (L - 4) + '" y="' + (y(v) + 3) + '" text-anchor="end">' + short(v) + '</text>'; }
+    [['cin', IN], ['cout', OUT]].forEach(function (p) { o += '<polyline fill="none" stroke="' + p[1] + '" stroke-width="2.2" stroke-linejoin="round" points="' + rows.map(function (r, n) { return x(n).toFixed(1) + ',' + y(r[p[0]]).toFixed(1); }).join(' ') + '"/>'; });
+    var step = Math.ceil(rows.length / 6);
+    rows.forEach(function (r, n) { if (n % step === 0) o += '<text x="' + x(n) + '" y="' + (H - 6) + '" text-anchor="middle">' + esc(r.label) + '</text>'; });
+    return o + '</svg>';
+  }
+  function legend(items) { return '<div class="legend">' + items.map(function (i) { return '<span><i style="background:' + i[1] + '"></i>' + i[0] + '</span>'; }).join('') + '</div>'; }
+  function hbars(rows, color, fmt) {
+    var m = rows.reduce(function (a, r) { return Math.max(a, r.v); }, 0) || 1;
+    return rows.map(function (r) { return '<div class="hbar"><span>' + esc(r.t) + (r.s ? ' <small>' + esc(r.s) + '</small>' : '') + '</span><span class="num">' + fmt(r.v) + '</span><div class="t"><i style="width:' + (r.v / m * 100).toFixed(1) + '%;background:' + color + '"></i></div></div>'; }).join('');
+  }
+
+  /* ---------- data ---------- */
+  function buckets(a, b) {
+    var n = diffDays(a, b) + 1, mode = n <= 31 ? 'd' : n <= 140 ? 'w' : 'm', map = {}, order = [];
+    for (var k = a; k <= b; k = addDays(k, 1)) {
+      var key, label;
+      if (mode === 'd') { key = k; label = dl(k).replace(/^\w+ /, '') === '' ? k : k.slice(8) + (k.slice(8) === '01' || k === a ? ' ' + dl(k).split(' ')[0] : ''); }
+      else if (mode === 'w') { var d0 = (dows(k) + 6) % 7; key = addDays(k, -d0); label = dl(key); }
+      else { key = k.slice(0, 7); label = new Date(key + '-01T00:00:00Z').toLocaleDateString('en-PH', { timeZone: 'UTC', month: 'short', year: '2-digit' }); }
+      if (!map[key]) { map[key] = { key: key, label: label, inc: 0, exp: 0, from: k, to: k }; order.push(key); }
+      var x = idx[k]; if (x) { map[key].inc += x.net; map[key].exp += x.expCash + x.expOnline; } map[key].to = k;
+    }
+    return order.map(function (k) { var r = map[k]; r.profit = S.r2(r.inc - r.exp); r.inc = S.r2(r.inc); r.exp = S.r2(r.exp); return r; });
+  }
+  function delta(cur, prev, bad) {
+    var p = pct(cur, prev); if (p === null || !isFinite(p)) return '<em>no earlier data</em>';
+    var up = p >= 0, good = bad ? !up : up;
+    return '<em class="' + (good ? 'up' : 'dn') + '">' + (up ? '▲ ' : '▼ ') + Math.abs(p).toFixed(0) + '% vs the period before</em>';
+  }
+
+  function paint() {
+    idx = S.index(); setRange();
+    var n = diffDays(from, to) + 1, cur = totals(from, to), pf = addDays(from, -n), pt = addDays(from, -1), prev = range === 'all' ? null : totals(pf, pt);
+    var profit = S.r2(cur.net - cur.exp), pprofit = prev ? S.r2(prev.net - prev.exp) : 0, h = '';
+    h += '<div class="cards">' +
+      '<div class="card in"><small>Income</small><b class="num">' + N(cur.net) + '</b>' + (prev ? delta(cur.net, prev.net) : '<em>' + cur.orders + ' orders</em>') + '</div>' +
+      '<div class="card out"><small>Expenses</small><b class="num">' + N(cur.exp) + '</b>' + (prev ? delta(cur.exp, prev.exp, 1) : '<em>&nbsp;</em>') + '</div>' +
+      '<div class="card"><small>Profit</small><b class="num ' + (profit < 0 ? 'neg' : '') + '">' + N(profit) + '</b>' + (prev ? delta(profit, pprofit) : '<em>&nbsp;</em>') + '</div>' +
+      '<div class="card"><small>Expenses per ₱100 of income</small><b class="num">' + (cur.net ? '₱' + (cur.exp / cur.net * 100).toFixed(0) : '-') + '</b><em>' + (cur.net ? 'Profit margin ' + (profit / cur.net * 100).toFixed(0) + '%' : 'no sales yet') + '</em></div></div>';
+
+    var rows = buckets(from, to), run = 0, run2 = 0;
+    var per = n <= 31 ? 'day' : n <= 140 ? 'week' : 'month';
+    h += '<div class="box"><h3>Income and expenses</h3><p class="why">Each bar is one ' + per + '. The line is profit.</p>' + legend([['Income', IN], ['Expenses', OUT], ['Profit', PR]]) + bars('a', rows, [{ k: 'inc', c: IN, n: 'Income' }, { k: 'exp', c: OUT, n: 'Expenses' }], true) + '</div>';
+    var cum = rows.map(function (r) { run += r.inc; run2 += r.exp; return { label: r.label, cin: run, cout: run2 }; });
+    h += '<div class="box"><h3>Running total</h3><p class="why">When the income line stays above the expenses line, you are making money. The gap is your profit so far.</p>' + legend([['Income so far', IN], ['Expenses so far', OUT]]) + lines('b', cum) + '</div>';
+
+    // where the money goes
+    var cats = {}, totExp = 0;
+    for (var k = from; k <= to; k = addDays(k, 1)) if (idx[k]) idx[k].expenses.forEach(function (e) { cats[e.cat] = (cats[e.cat] || 0) + e.amt; totExp += e.amt; });
+    var cr = Object.keys(cats).map(function (c) { return { t: c, v: S.r2(cats[c]), s: totExp ? (cats[c] / totExp * 100).toFixed(0) + '%' : '' }; }).sort(function (a, b) { return b.v - a.v; });
+    h += '<div class="box"><h3>Where the money goes</h3><p class="why">Expenses by category.</p>' + (cr.length ? hbars(cr, OUT, N) : '<div class="empty" style="padding:6px 0">No expenses in this period.</div>') + '</div>';
+
+    // how people pay and order type
+    var dine = 0, take = 0, orders = 0, rev = 0, hours = {}, items = {};
+    S.sales().forEach(function (s) {
+      var d = S.phDate(s.t); if (d < from || d > to || s.ref) return;
+      orders++; rev += s.net; if (s.type === 'take') take += s.net; else dine += s.net;
+      var hr = +new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', hour: 'numeric', hour12: false }).format(new Date(s.t)) % 24;
+      hours[hr] = hours[hr] || { n: 0, v: 0 }; hours[hr].n++; hours[hr].v += s.net;
+      s.lines.forEach(function (l) { var u = l.price; (l.addons || []).forEach(function (a) { u += a.p; }); var it = items[l.name] || (items[l.name] = { q: 0, v: 0 }); it.q += l.qty; it.v += u * l.qty; });
+    });
+    h += '<div class="box"><h3>Sales mix</h3>' + hbars([{ t: 'Cash', v: cur.cash }, { t: 'E-wallet and cards', v: cur.ewallet }, { t: 'Dine in', v: dine }, { t: 'Take out', v: take }], IN, N) +
+      '<p class="why">' + (orders ? 'Average order ' + N(rev / orders) + ' over ' + orders + ' orders.' : 'No orders in this period.') + '</p></div>';
+
+    // weekday
+    var wd = [0, 1, 2, 3, 4, 5, 6].map(function (i) { return { label: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][i], inc: 0, exp: 0, n: 0, profit: 0 }; });
+    for (var q = from; q <= to && q <= today; q = addDays(q, 1)) { var w = wd[dows(q)], x = idx[q]; w.n++; if (x) { w.inc += x.net; w.exp += x.expCash + x.expOnline; } }
+    wd.forEach(function (w) { w.inc = w.n ? S.r2(w.inc / w.n) : 0; w.exp = w.n ? S.r2(w.exp / w.n) : 0; w.profit = S.r2(w.inc - w.exp); });
+    h += '<div class="box"><h3>Best days of the week</h3><p class="why">Average income and expenses for each weekday.</p>' + legend([['Income', IN], ['Expenses', OUT]]) + bars('c', wd, [{ k: 'inc', c: IN, n: 'Income' }, { k: 'exp', c: OUT, n: 'Expenses' }], false) + '</div>';
+
+    // busy hours
+    var hk = Object.keys(hours).map(Number).sort(function (a, b) { return a - b; });
+    if (hk.length) {
+      var hr = []; for (var z = hk[0]; z <= hk[hk.length - 1]; z++) hr.push({ label: (z % 12 || 12) + (z < 12 ? 'a' : 'p'), inc: S.r2((hours[z] || { v: 0 }).v), exp: 0, profit: 0, orders: (hours[z] || { n: 0 }).n });
+      h += '<div class="box"><h3>Busy hours</h3><p class="why">Income by hour of the day.</p>' + bars('d', hr, [{ k: 'inc', c: IN, n: 'Income' }], false) + '</div>';
+    }
+
+    // top items
+    var ir = Object.keys(items).map(function (k) { return { t: k, v: S.r2(items[k].v), s: items[k].q + ' sold' }; }).sort(function (a, b) { return b.v - a.v; }).slice(0, 8);
+    if (ir.length) h += '<div class="box"><h3>Top items</h3><p class="why">By sales before discounts.</p>' + hbars(ir, IN, N) + '</div>';
+
+    // last 6 months
+    var t0 = new Date(today + 'T00:00:00Z'), ms = [];
+    for (var i = 5; i >= 0; i--) { var dd = new Date(Date.UTC(t0.getUTCFullYear(), t0.getUTCMonth() - i, 1)), mo = S.month(dd.getUTCFullYear(), dd.getUTCMonth()).total, ex = S.r2(mo.expCash + mo.expOnline); ms.push({ label: dd.toLocaleDateString('en-PH', { timeZone: 'UTC', month: 'short' }), inc: mo.net, exp: ex, profit: S.r2(mo.net - ex) }); }
+    h += '<div class="box"><h3>Month by month</h3><p class="why">The last 6 months side by side.</p>' + legend([['Income', IN], ['Expenses', OUT], ['Profit', PR]]) + bars('e', ms, [{ k: 'inc', c: IN, n: 'Income' }, { k: 'exp', c: OUT, n: 'Expenses' }], true) + '</div>';
+
+    // day table
+    var tr = '';
+    for (var d2 = to; d2 >= from && tr.split('<tr>').length < 63; d2 = addDays(d2, -1)) {
+      var xx = idx[d2]; if (!xx || (!xx.net && !xx.expCash && !xx.expOnline)) continue;
+      var pf2 = S.r2(xx.net - xx.expCash - xx.expOnline);
+      tr += '<tr><td><a href="calendar.html?date=' + d2 + '">' + dl(d2) + '</a></td><td class="num">' + N(xx.net) + '</td><td class="num">' + N(xx.expCash + xx.expOnline) + '</td><td class="num ' + (pf2 < 0 ? 'neg' : '') + '">' + N(pf2) + '</td></tr>';
+    }
+    h += '<div class="box"><h3>Day by day</h3>' + (tr ? '<table class="dt"><tr><th>Day</th><th>Income</th><th>Expenses</th><th>Profit</th></tr>' + tr + '</table>' : '<div class="empty" style="padding:6px 0">Nothing recorded in this period.</div>') + '</div>';
+    $('body').innerHTML = h;
+  }
+
+  $('body').addEventListener('click', function (e) {
+    var r = e.target.closest('rect[data-c]'); if (!r) return;
+    var c = charts[r.getAttribute('data-c')], row = c.rows[+r.getAttribute('data-n')], t = '<b>' + esc(row.label) + '</b>: ';
+    t += c.series.map(function (s) { return s.n + ' ' + N(row[s.k]); }).join(' · ');
+    if (c.line) t += ' · Profit ' + N(row.profit);
+    if (row.orders != null) t += ' · ' + row.orders + ' orders';
+    document.getElementById('ro-' + r.getAttribute('data-c')).innerHTML = t;
+  });
+  $('chips').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    range = b.getAttribute('data-r');
+    document.querySelectorAll('#chips button').forEach(function (x) { x.classList.toggle('on', x === b); });
+    $('custom').hidden = range !== 'c';
+    if (range === 'c') { if (!$('from').value) $('from').value = addDays(today, -29); if (!$('to').value) $('to').value = today; }
+    paint();
+  });
+  $('from').onchange = $('to').onchange = paint;
+  paint();
+  window.addEventListener('pageshow', function (e) { if (e.persisted) paint(); });
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(function () {});
+})();
+</script>
+</body>
+</html>

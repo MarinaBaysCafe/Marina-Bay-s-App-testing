@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<!-- Copyright (c) 2026 Marina Bay's Cafe. All rights reserved. -->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="security.js"></script>
+<script src="firebase-config.js"></script>
+<script src="cloud.js" data-uses="sales,shifts,expenses,counter"></script>
+<meta name="robots" content="noindex, nofollow">
+<title>Check data | Marina Bay's Cafe</title>
+<meta name="theme-color" content="#0d3a4e">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="stylesheet" href="app.css">
+<style>
+  .issue { padding: 14px 16px; border-top: 1px solid var(--line); }
+  .issue b { display: block; font-size: 16px; }
+  .issue p { margin: 3px 0 10px; font-size: 14px; color: var(--muted); }
+  .opts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .opts a, .opts button { text-decoration: none; display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px; border: 1.5px solid var(--teal); border-radius: 6px; background: #fff; color: var(--teal); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer; }
+  .opts .quiet { border-color: #c9c1b5; color: var(--ink); font-weight: 500; }
+  .opts .danger { border-color: var(--bad); color: var(--bad); }
+  .good { padding: 28px 16px; text-align: center; }
+  .good b { display: block; font-size: 18px; color: var(--teal); margin-bottom: 4px; }
+</style>
+<link rel="stylesheet" href="wide.css">
+<link rel="stylesheet" href="brand.css">
+</head>
+<body class="pg-narrow">
+<div class="app">
+  <div class="top">
+    <a href="index.html" aria-label="Home" style="display:flex"><img src="icons/logo-64.png" alt=""></a>
+    <div><b>Marina Bay's Cafe</b><span class="sub">Check data</span></div>
+    <nav class="apps" aria-label="Apps"><a href="analytics.html">Analytics</a><a href="index.html">All apps</a></nav>
+  </div>
+  <main id="main">
+    <p class="help">These are records that may not make sense. Nothing changes until you pick a choice. "Keep" hides the problem on this phone.</p>
+    <div id="list"></div>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+<script src="menu-default.js"></script>
+<script src="inventory-default.js"></script>
+<script src="app-data.js"></script>
+<script src="shift-lib.js"></script>
+<script src="checks.js"></script>
+<script>
+(function () {
+  var D = window.MBData, esc = D.esc, list = document.getElementById('list'), issues = [];
+  function paint() {
+    issues = MBChecks.find();
+    if (!issues.length) { list.innerHTML = '<div class="good"><b>All clear</b>No odd records found in sales, shifts, expenses or the money counter.</div>'; return; }
+    list.innerHTML = '<div class="sub-note" style="padding-top:12px">' + issues.length + (issues.length === 1 ? ' thing' : ' things') + ' to look at</div>' + issues.map(function (it, i) {
+      return '<div class="issue"><b>' + esc(it.title) + '</b><p>' + esc(it.detail) + '</p><div class="opts">' + it.choices.map(function (c, j) {
+        var cls = c.keep ? 'quiet' : c.danger ? 'danger' : '';
+        return c.href ? '<a href="' + esc(c.href) + '">' + esc(c.label) + '</a>' : '<button class="' + cls + '" data-i="' + i + '" data-j="' + j + '">' + esc(c.label) + '</button>';
+      }).join('') + '</div></div>';
+    }).join('');
+  }
+  list.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-i]'); if (!b) return;
+    var it = issues[+b.getAttribute('data-i')], c = it.choices[+b.getAttribute('data-j')], v;
+    if (c.keep) MBChecks.keep(it.id);
+    else {
+      if (c.ask) { v = prompt(c.ask); if (v === null || v.trim() === '' || isNaN(parseFloat(v)) || parseFloat(v) < 0) { D.toast('Enter a number'); return; } }
+      else if (c.danger && !confirm(c.label + '?\nThis cannot be undone.')) return;
+      c.run(v); D.toast('Done');
+    }
+    paint();
+  });
+  paint();
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(function () {});
+})();
+</script>
+</body>
+</html>

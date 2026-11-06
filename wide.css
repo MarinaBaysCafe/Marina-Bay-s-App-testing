@@ -1,0 +1,111 @@
+/* Copyright (c) 2026 Marina Bay's Cafe. All rights reserved.
+   Layout for tablets and wide screens. Loaded last on every page, so it can override the phone layout.
+   Phones (under 768 px wide) keep the layout in each page's own styles. */
+
+/* ---- the POS has a side panel, hidden on phones ---- */
+.pos-body { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.pos-left { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.pos-right { display: none; }
+
+@media (min-width: 768px) {
+  .primary { white-space: nowrap; }
+  body .app { max-width: 1180px; }
+  body.pg-narrow .app { max-width: 680px; }
+  body.pg-home .app { max-width: 900px; }
+
+  .top { padding-top: calc(14px + env(safe-area-inset-top)); padding-bottom: 14px; }
+  .top b { font-size: 18px; }
+  .chips { flex-wrap: wrap; overflow-x: visible; }
+  .totals b { font-size: 22px; }
+  .totals small { font-size: 12px; }
+  .tab { padding: 16px 0 15px; font-size: 15px; }
+
+  /* ---- home ---- */
+  body.pg-home .app { max-width: 1000px; }
+  body.pg-home .today { padding: 20px 24px 6px; }
+  body.pg-home .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  body.pg-home .st b { font-size: 24px; }
+  body.pg-home .bigbtn { margin: 14px 24px 6px; }
+  body.pg-home h2.sec { margin-left: 24px; margin-right: 24px; }
+  body.pg-home .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 0 24px; gap: 12px; }
+  body.pg-home .tile { padding: 18px 16px; }
+  body.pg-home .links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0 24px; gap: 10px; }
+  body.pg-home .links a, body.pg-home .links a:last-child { border: 1px solid var(--line); border-radius: 10px; }
+  body.pg-home .copy { padding-left: 24px; }
+
+  /* ---- point of sale: menu on the left, order on the right ---- */
+  body.pg-pos .pos-body { flex-direction: row; }
+  body.pg-pos .pos-right { display: flex; flex-direction: column; flex: none; width: clamp(330px, 34vw, 420px); min-height: 0; border-left: 1px solid var(--line); background: #fff; }
+  body.pg-pos .pos-right .sh-head { padding-top: 16px; }
+  body.pg-pos .pos-right .sh-body { flex: 1; overflow-y: auto; }
+  body.pg-pos .pos-right .sh-foot { padding-bottom: 14px; flex-wrap: wrap; }
+  body.pg-pos .pos-right #printOrder { flex: 1; }
+  body.pg-pos .pos-right #chargeBtn { order: 3; flex: 1 1 100%; }
+  body.pg-pos .pos-right .empty { padding: 28px 16px; }
+  body.pg-pos .cartbar { display: none; }
+  body.pg-pos .chip { padding: 5px 12px; font-size: 13.5px; }
+  body.pg-pos .searchbar { padding-top: 10px; }
+  body.pg-pos #items { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; padding: 12px 16px 18px; align-content: start; }
+  body.pg-pos #items .prow, body.pg-pos #items .prow:last-child { border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-height: 72px; }
+  body.pg-pos #items .catnote, body.pg-pos #items .sect, body.pg-pos #items .empty { grid-column: 1 / -1; }
+  body.pg-pos #items .sect { padding-left: 2px; }
+  /* size and add-on choices open as a centered window */
+  body.pg-pos .sheet { left: 50%; right: auto; top: 50%; bottom: auto; transform: translate(-50%, -50%); width: min(520px, 92%); max-height: 88%; border-radius: 12px; }
+
+  /* ---- calendar: month on the left, the chosen day on the right ---- */
+  body.pg-calendar #v-cal.on { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-items: start; }
+  body.pg-calendar .cal-right { margin-top: 0; border-top: 0; border-left: 1px solid var(--line); position: sticky; top: 0; max-height: calc(100vh - 120px); overflow-y: auto; }
+  body.pg-calendar .cell { min-height: 84px; }
+  body.pg-calendar .cell .a, body.pg-calendar .cell .b { font-size: 12px; }
+  body.pg-calendar .cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  body.pg-calendar .cal-right .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  /* ---- lists become cards in columns ---- */
+  body.pg-menu #itemList, body.pg-menu #catList, body.pg-menu #addonList,
+  body.pg-recipes #rlist, body.pg-inventory #list {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px 16px 16px; align-content: start;
+  }
+  body.pg-menu .prow, body.pg-menu .prow:last-child,
+  body.pg-recipes .prow, body.pg-recipes .prow:last-child { border: 1px solid var(--line); border-radius: 8px; }
+  body.pg-menu #itemList .empty, body.pg-menu #catList .empty, body.pg-menu #addonList .empty, body.pg-recipes #rlist .empty,
+  body.pg-inventory #list .empty, body.pg-inventory #list .grp { grid-column: 1 / -1; }
+  body.pg-inventory .grp { border: 1px solid var(--line); border-radius: 6px; margin-top: 6px; }
+  body.pg-inventory .irow { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px 8px 14px; }
+  body.pg-inventory .addbar { display: flex; justify-content: center; }
+  body.pg-inventory .addbar .add-btn { max-width: 420px; }
+  body.pg-recipes .filters { padding: 12px 16px; }
+
+  /* ---- forms and settings stay in a comfortable column ---- */
+  body.pg-menu #v-item, body.pg-menu #v-cat, body.pg-menu #v-addon, body.pg-menu #v-data,
+  body.pg-recipes #v-view, body.pg-recipes #v-edit, body.pg-recipes #v-data,
+  body.pg-inventory #v-item, body.pg-inventory #v-data,
+  body.pg-counter #v-cal, body.pg-counter #v-more, body.pg-expenses #v-cal, body.pg-expenses #v-more {
+    max-width: 720px; margin-left: auto; margin-right: auto; width: 100%;
+  }
+  body.pg-counter .cell, body.pg-expenses .cell { min-height: 86px; }
+  body.pg-counter .cell small, body.pg-expenses .cell small { font-size: 12px; }
+
+  /* ---- money counter: bills on the left, totals and actions on the right ---- */
+  body.pg-counter #v-count.on { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-content: start; }
+  body.pg-counter #v-count .daynav { grid-column: 1 / -1; }
+  body.pg-counter #v-count #rows { grid-column: 1; grid-row: 2 / span 8; border-right: 1px solid var(--line); }
+  body.pg-counter #v-count > :not(.daynav):not(#rows) { grid-column: 2; }
+  body.pg-counter .row { height: 66px; }
+
+  /* ---- expenses: form on the left, the day's list on the right ---- */
+  body.pg-expenses #v-day.on { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-content: start; }
+  body.pg-expenses #v-day .daynav { grid-column: 1 / -1; }
+  body.pg-expenses #v-day .form { grid-column: 1; grid-row: 2 / span 6; border-right: 1px solid var(--line); align-self: stretch; }
+  body.pg-expenses #v-day > :not(.daynav):not(.form) { grid-column: 2; }
+}
+
+/* tablets held sideways are short, so tighten the bills list to avoid scrolling */
+@media (min-width: 768px) and (max-height: 820px) {
+  body.pg-counter .row { height: 54px; }
+  body.pg-counter .step { height: 38px; width: 40px; }
+}
+
+@media (min-width: 1100px) {
+  body.pg-menu #itemList, body.pg-menu #catList, body.pg-menu #addonList,
+  body.pg-recipes #rlist, body.pg-inventory #list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

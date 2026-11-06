@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<!-- Copyright (c) 2026 Marina Bay's Cafe. All rights reserved. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="security.js"></script>
+<script src="firebase-config.js"></script>
+<script src="cloud.js" data-uses="expenses,counter"></script>
+<meta name="robots" content="noindex, nofollow">
+<meta name="author" content="Marina Bay's Cafe">
+<meta name="copyright" content="Copyright 2026 Marina Bay's Cafe. All rights reserved.">
+<title>Marina Bay's Cafe Expenses</title>
+<meta name="theme-color" content="#0d3a4e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Expenses">
+<link rel="manifest" href="manifest-expenses.webmanifest">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/expenses-apple-touch-icon.png">
+<style>
+  :root {
+    --ink: #1f1a17;
+    --muted: #7a7068;
+    --line: #e4dfd7;
+    --soft: #f5f2ec;
+    --teal: #0d3a4e;
+    --brown: #9b7952;
+    --spend: #7d5f3c;
+    --bad: #a4372b;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink); background: var(--soft); font-size: 16px; line-height: 1.35;
+  }
+  .app {
+    max-width: 480px; margin: 0 auto; height: 100%;
+    display: flex; flex-direction: column; background: #fff;
+    border-left: 1px solid var(--line); border-right: 1px solid var(--line);
+  }
+  .num { font-variant-numeric: tabular-nums; }
+
+  .top {
+    display: flex; align-items: center; gap: 10px;
+    padding: calc(10px + env(safe-area-inset-top)) 12px 10px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .top img { width: 32px; height: 32px; }
+  .top b { font-size: 16px; font-weight: 650; }
+  .top span.sub { display: block; font-size: 12px; color: var(--muted); }
+  .apps { margin-left: auto; display: flex; gap: 2px; }
+  .apps a {
+    padding: 8px 10px; font-size: 14px; color: var(--muted); text-decoration: none;
+    border-bottom: 2px solid transparent;
+  }
+  .apps a.on { color: var(--ink); font-weight: 650; border-bottom-color: var(--teal); }
+
+  main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .view { display: none; }
+  .view.on { display: block; }
+
+  .daynav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 8px 10px 16px; border-bottom: 1px solid var(--line);
+  }
+  .daynav .when { font-size: 17px; font-weight: 650; cursor: pointer; }
+  .daynav .when small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+  .arrows { display: flex; gap: 2px; }
+  .icon-btn { width: 44px; height: 44px; border: none; background: none; color: var(--ink); font-size: 24px; cursor: pointer; border-radius: 6px; }
+  .icon-btn:active { background: var(--soft); }
+
+  /* form */
+  .form { padding: 6px 16px 14px; background: var(--soft); border-bottom: 1px solid var(--line); }
+  .form.editing { background: #eef3f5; }
+  .frow { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 50px; border-bottom: 1px solid var(--line); }
+  .frow:last-of-type { border-bottom: none; }
+  .frow label { font-weight: 650; font-size: 15px; flex: none; }
+  .field {
+    flex: 1; min-width: 0; max-width: 220px; border: none; border-bottom: 1.5px solid #c9c1b5; background: none;
+    font: inherit; font-size: 17px; font-weight: 500; text-align: right; color: var(--ink); padding: 8px 0; border-radius: 0;
+    -moz-appearance: textfield; appearance: none;
+  }
+  select.field { text-align-last: right; background: none; }
+  .field:focus { outline: none; border-bottom-color: var(--teal); }
+  .field::-webkit-outer-spin-button, .field::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .peso-wrap { display: flex; align-items: center; gap: 6px; flex: 1; justify-content: flex-end; }
+  .peso-wrap .field { max-width: 150px; font-weight: 650; font-size: 20px; }
+  .seg { display: flex; border: 1.5px solid #c9c1b5; border-radius: 6px; overflow: hidden; }
+  .seg button { border: none; background: #fff; font: inherit; font-size: 15px; padding: 8px 18px; color: var(--ink); cursor: pointer; }
+  .seg button + button { border-left: 1.5px solid #c9c1b5; }
+  .seg button.on { background: var(--teal); color: #fff; font-weight: 650; }
+  .fbtns { display: flex; align-items: center; gap: 14px; padding-top: 10px; }
+  .primary { flex: 1; height: 46px; border: none; border-radius: 6px; background: var(--teal); color: #fff; font: inherit; font-weight: 650; font-size: 16px; cursor: pointer; }
+  .primary:active { opacity: .8; }
+  .text-btn { border: none; background: none; font: inherit; font-size: 14px; color: var(--muted); text-decoration: underline; cursor: pointer; padding: 8px 2px; }
+  .text-btn.danger { color: var(--bad); }
+
+  /* entries */
+  .entry {
+    display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+    padding: 12px 16px; border: none; border-bottom: 1px solid var(--line); background: #fff;
+    font: inherit; color: var(--ink); cursor: pointer;
+  }
+  .entry:active { background: var(--soft); }
+  .entry .what { flex: 1; min-width: 0; }
+  .entry .what b { display: block; font-weight: 650; }
+  .entry .what span { display: block; font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .entry .amt { text-align: right; font-weight: 600; }
+  .entry .amt small { display: block; font-size: 11px; color: var(--muted); font-weight: 400; }
+  .empty { padding: 22px 16px; color: var(--muted); font-size: 14px; }
+  .cashline { margin: 0; padding: 12px 16px; font-size: 13px; color: var(--muted); background: var(--soft); border-top: 1px solid var(--line); }
+  .cashline b { color: var(--ink); }
+  .cashline a { color: var(--teal); }
+
+  /* totals */
+  .totals { display: grid; grid-template-columns: 1fr 1fr 1.2fr; border-top: 2px solid var(--ink); background: #fff; }
+  .totals div { padding: 8px 12px 9px; border-right: 1px solid var(--line); }
+  .totals div:last-child { border-right: none; background: var(--teal); color: #fff; }
+  .totals small { display: block; font-size: 11px; color: var(--muted); }
+  .totals div:last-child small { color: #cfdde4; }
+  .totals b { font-size: 17px; font-weight: 700; }
+
+  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); background: #fff; }
+  .tab { border: none; background: none; font: inherit; font-size: 14px; color: var(--muted); padding: 13px 0 12px; cursor: pointer; border-top: 3px solid transparent; margin-top: -1px; }
+  .tab.on { color: var(--teal); font-weight: 650; border-top-color: var(--teal); }
+
+  /* calendar */
+  .monthbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 8px 16px; }
+  .monthbar h2 { margin: 0; font-size: 18px; font-weight: 650; }
+  .monthsum { padding: 0 16px 12px; font-size: 14px; color: var(--muted); border-bottom: 1px solid var(--line); }
+  .monthsum b { color: var(--ink); }
+  .dow, .days { display: grid; grid-template-columns: repeat(7, 1fr); }
+  .dow div { text-align: center; font-size: 12px; color: var(--muted); padding: 8px 0 6px; }
+  .days { border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin: 0 16px 16px; }
+  .cell {
+    min-height: 58px; border: none; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    background: #fff; font: inherit; font-size: 14px; color: var(--ink);
+    padding: 5px 4px; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 2px;
+  }
+  .cell.blank { background: var(--soft); cursor: default; }
+  .cell small { font-size: 10px; color: var(--spend); font-weight: 650; word-break: break-all; line-height: 1.15; }
+  .cell.today .d { display: inline-block; width: 22px; height: 22px; line-height: 22px; text-align: center; border-radius: 50%; background: var(--ink); color: #fff; font-size: 13px; }
+  .cell.sel { background: #e9f0f3; }
+  .bd-title { padding: 4px 16px 6px; font-weight: 650; font-size: 15px; }
+  .bd { display: flex; justify-content: space-between; padding: 9px 16px; border-top: 1px solid var(--line); font-size: 15px; }
+  .bd span:first-child small { color: var(--muted); }
+  .hint { padding: 12px 16px 16px; font-size: 13px; color: var(--muted); }
+
+  /* more */
+  .item { display: block; width: 100%; text-align: left; padding: 14px 16px; border: none; border-bottom: 1px solid var(--line); background: #fff; font: inherit; cursor: pointer; color: var(--ink); }
+  .item b { display: block; font-weight: 650; }
+  .item span { font-size: 13px; color: var(--muted); }
+  .item:active { background: var(--soft); }
+  .sect { padding: 16px 16px 6px; font-weight: 650; }
+  .catrow { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px 4px 16px; border-top: 1px solid var(--line); min-height: 46px; }
+  .catrow .x { width: 44px; height: 44px; border: none; background: none; color: var(--muted); font-size: 20px; cursor: pointer; }
+  .addcat { display: flex; gap: 8px; padding: 10px 16px 14px; border-top: 1px solid var(--line); }
+  .addcat input { flex: 1; min-width: 0; height: 42px; border: 1.5px solid #c9c1b5; border-radius: 6px; padding: 0 10px; font: inherit; background: #fff; color: var(--ink); }
+  .addcat input:focus { outline: none; border-color: var(--teal); }
+  .addcat button { height: 42px; padding: 0 16px; border: none; border-radius: 6px; background: var(--teal); color: #fff; font: inherit; font-weight: 650; cursor: pointer; }
+  .note { padding: 14px 16px; font-size: 13px; color: var(--muted); }
+
+  .toast { position: fixed; left: 50%; bottom: 130px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 8px 14px; border-radius: 6px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .toast.on { opacity: 1; }
+  :focus-visible { outline: 2px solid var(--brown); outline-offset: 1px; }
+  @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+</style>
+<link rel="stylesheet" href="wide.css">
+<link rel="stylesheet" href="brand.css">
+</head>
+<body class="pg-expenses">
+<div class="app">
+  <div class="top">
+    <a href="index.html" aria-label="Home" style="display:flex"><img src="icons/logo-64.png" alt=""></a>
+    <div><b>Marina Bay's Cafe</b><span class="sub">Expenses</span></div>
+    <nav class="apps" aria-label="Apps"><a href="analytics.html">Analytics</a><a href="index.html">All apps</a></nav>
+  </div>
+
+  <main id="main">
+    <!-- DAY -->
+    <section class="view on" id="v-day">
+      <div class="daynav">
+        <div class="when" id="when"></div>
+        <div class="arrows">
+          <button class="icon-btn" id="prevDay" aria-label="Previous day">&#8249;</button>
+          <button class="icon-btn" id="nextDay" aria-label="Next day">&#8250;</button>
+        </div>
+      </div>
+
+      <div class="form" id="form">
+        <div class="frow">
+          <label for="amt">Amount</label>
+          <div class="peso-wrap"><span>₱</span><input class="field num" id="amt" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00"></div>
+        </div>
+        <div class="frow">
+          <label for="cat">Category</label>
+          <select class="field" id="cat"></select>
+        </div>
+        <div class="frow">
+          <label for="note">Note</label>
+          <input class="field" id="note" type="text" maxlength="80" placeholder="Optional" autocomplete="off">
+        </div>
+        <div class="frow">
+          <label>Paid from</label>
+          <div class="seg" id="src"><button type="button" data-s="cash" class="on">Cash</button><button type="button" data-s="online">Online</button></div>
+        </div>
+        <div class="fbtns">
+          <button class="primary" id="save">Add expense</button>
+          <button class="text-btn" id="cancel" hidden>Cancel</button>
+          <button class="text-btn danger" id="del" hidden>Delete</button>
+        </div>
+      </div>
+
+      <div id="list"></div>
+      <p class="cashline" id="cashline" hidden></p>
+      <button class="mb-print" id="printBtn">Print receipt</button>
+      <p style="margin:12px 16px 0"><a id="calLink" href="calendar.html" style="font-size:14px;color:var(--teal)">See this day in the calendar</a></p>
+      <div style="height:16px"></div>
+    </section>
+
+    <!-- CALENDAR -->
+    <section class="view" id="v-cal">
+      <div class="monthbar">
+        <h2 id="monthTitle"></h2>
+        <div class="arrows">
+          <button class="icon-btn" id="prevM" aria-label="Previous month">&#8249;</button>
+          <button class="icon-btn" id="nextM" aria-label="Next month">&#8250;</button>
+        </div>
+      </div>
+      <div class="monthsum" id="monthSum"></div>
+      <div class="dow"><div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div></div>
+      <div class="days" id="days"></div>
+      <div id="breakdown"></div>
+      <div class="hint">Tap a day to open it. The amount on each day is what was spent.</div>
+    </section>
+
+    <!-- MORE -->
+    <section class="view" id="v-more">
+      <div class="sect">Categories</div>
+      <div id="cats"></div>
+      <div class="addcat">
+        <input id="newCat" type="text" maxlength="30" placeholder="New category" autocomplete="off">
+        <button id="addCat">Add</button>
+      </div>
+      <div class="sect">Data</div>
+      <button class="item" id="exportCsv"><b>Export to spreadsheet (CSV)</b><span>One row per expense</span></button>
+      <button class="item" id="backup"><b>Save a backup</b><span>Downloads a file with all expenses and categories</span></button>
+      <button class="item" id="restore"><b>Restore from a backup</b><span>Load a backup file saved earlier</span></button>
+      <input type="file" id="file" accept=".json,application/json" hidden>
+      <div id="printerBox"></div>
+      <p class="note">Removing a category does not change past expenses. Records are saved on this phone only, so save a backup once in a while.</p>
+    </section>
+  </main>
+
+  <div class="totals" id="totals">
+    <div><small>Paid in cash</small><b class="num" id="cashTotal">₱0.00</b></div>
+    <div><small>Paid online</small><b class="num" id="onlineTotal">₱0.00</b></div>
+    <div><small>Total spent</small><b class="num" id="grandTotal">₱0.00</b></div>
+  </div>
+
+  <nav class="tabs">
+    <button class="tab on" data-v="day">Expenses</button>
+    <button class="tab" data-v="cal">Calendar</button>
+    <button class="tab" data-v="more">More</button>
+  </nav>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="receipt-logo.js"></script>
+<script src="printer.js"></script>
+<script>
+(function () {
+  var KEY = 'marinabays_expenses_v1';
+  var COUNTER_KEY = 'marinabays_money_v1';
+  var TZ = 'Asia/Manila';
+  var MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var DEFAULT_CATS = ['Ingredients', 'Supplies', 'Utilities', 'Salary', 'Rent', 'Transport', 'Repairs', 'Other'];
+  var $ = function (id) { return document.getElementById(id); };
+
+  function peso(n) { return '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function pesoShort(n) { return '₱' + Number(n).toLocaleString('en-PH', { maximumFractionDigits: 0 }); }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function todayPH() { return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
+  function toUTC(k) { var p = k.split('-'); return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])); }
+  function fromUTC(d) { return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); }
+  function shiftDay(k, n) { var d = toUTC(k); d.setUTCDate(d.getUTCDate() + n); return fromUTC(d); }
+
+  var store = { days: {}, cats: DEFAULT_CATS.slice(), lastCat: '', lastSrc: 'cash' };
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY));
+    if (saved && saved.days) { store = saved; if (!store.cats || !store.cats.length) store.cats = DEFAULT_CATS.slice(); }
+  } catch (e) {}
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { toast('Could not save. Storage may be full.'); } }
+  function dayList(k) { return store.days[k] || []; }
+  function sumOf(list, src) { var t = 0; list.forEach(function (x) { if (!src || x.src === src) t += x.amt; }); return t; }
+
+  var toastTimer;
+  function toast(msg) { var t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.classList.remove('on'); }, 1800); }
+
+  var today = todayPH(), selected = today;
+  var qd = /[?&]date=(\d{4}-\d{2}-\d{2})/.exec(location.search);  // opened from the Calendar
+  if (qd) selected = qd[1];
+  var viewY = +selected.slice(0, 4), viewM = +selected.slice(5, 7) - 1;
+  var editingId = null, src = store.lastSrc || 'cash';
+
+  /* ---------- form ---------- */
+  function fillCats(sel) {
+    var html = '';
+    store.cats.forEach(function (c) { html += '<option value="' + esc(c) + '">' + esc(c) + '</option>'; });
+    if (sel && store.cats.indexOf(sel) === -1) html += '<option value="' + esc(sel) + '">' + esc(sel) + '</option>';
+    html += '<option value="__new">+ New category</option>';
+    $('cat').innerHTML = html;
+    $('cat').value = sel || store.lastCat || store.cats[0];
+    if ($('cat').value !== (sel || store.lastCat || store.cats[0])) $('cat').value = store.cats[0];
+  }
+  function setSrc(s) {
+    src = s;
+    document.querySelectorAll('#src button').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-s') === s); });
+  }
+  $('src').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) setSrc(b.getAttribute('data-s')); });
+  $('cat').addEventListener('change', function () {
+    if ($('cat').value === '__new') {
+      var name = (prompt('New category name') || '').trim();
+      if (name) { if (store.cats.indexOf(name) === -1) store.cats.push(name); store.lastCat = name; save(); }
+      fillCats(name || store.lastCat);
+    }
+  });
+
+  function resetForm() {
+    editingId = null;
+    $('amt').value = ''; $('note').value = '';
+    fillCats(store.lastCat); setSrc(store.lastSrc || 'cash');
+    $('save').textContent = 'Add expense';
+    $('cancel').hidden = true; $('del').hidden = true;
+    $('form').classList.remove('editing');
+  }
+  function startEdit(id) {
+    var x = dayList(selected).filter(function (e) { return e.id === id; })[0]; if (!x) return;
+    editingId = id;
+    $('amt').value = x.amt; $('note').value = x.note || '';
+    fillCats(x.cat); setSrc(x.src);
+    $('save').textContent = 'Save changes';
+    $('cancel').hidden = false; $('del').hidden = false;
+    $('form').classList.add('editing');
+    $('main').scrollTop = 0; $('amt').focus();
+  }
+  $('save').onclick = function () {
+    var amt = Math.round((+$('amt').value) * 100) / 100;
+    if (!(amt > 0)) { toast('Enter an amount'); $('amt').focus(); return; }
+    var cat = $('cat').value === '__new' ? store.cats[0] : $('cat').value;
+    var prev = editingId ? dayList(selected).filter(function (x) { return x.id === editingId; })[0] : null;
+    var entry = { id: editingId || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6)), amt: amt, cat: cat, note: $('note').value.trim(), src: src, t: (prev && prev.t) || Date.now() };
+    var list = store.days[selected] || (store.days[selected] = []);
+    if (editingId) {
+      for (var i = 0; i < list.length; i++) if (list[i].id === editingId) list[i] = entry;
+    } else { list.push(entry); }
+    store.lastCat = cat; store.lastSrc = src;
+    save(); resetForm(); paintDay();
+    toast(editingId === null ? 'Expense added' : 'Saved');
+    if (!editingId) $('amt').focus();
+  };
+  $('cancel').onclick = resetForm;
+  $('del').onclick = function () {
+    if (!confirm('Delete this expense?')) return;
+    store.days[selected] = dayList(selected).filter(function (e) { return e.id !== editingId; });
+    if (!store.days[selected].length) delete store.days[selected];
+    save(); resetForm(); paintDay(); toast('Deleted');
+  };
+  ['amt', 'note'].forEach(function (id) {
+    $(id).addEventListener('keydown', function (e) { if (e.key === 'Enter') $('save').click(); });
+  });
+
+  /* ---------- day ---------- */
+  function counted(k) {
+    try {
+      var s = JSON.parse(localStorage.getItem(COUNTER_KEY)) || {}, r = s[k], t = 0;
+      if (!r) return 0;
+      Object.keys(r.counts || {}).forEach(function (d) { t += (+d) * (r.counts[d] || 0); });
+      return t;
+    } catch (e) { return 0; }
+  }
+  function paintDay() {
+    var cl = $('calLink'); if (cl) cl.href = 'calendar.html?date=' + selected;
+    var list = dayList(selected), dt = toUTC(selected);
+    $('when').innerHTML = dt.toLocaleDateString('en-PH', { timeZone: 'UTC', weekday: 'long', month: 'long', day: 'numeric' }) +
+      '<small>' + dt.getUTCFullYear() + (selected === today ? ', today' : '') + '</small>';
+    var html = '';
+    list.slice().reverse().forEach(function (x) {
+      html += '<button class="entry" data-id="' + x.id + '"><div class="what"><b>' + esc(x.cat) + '</b>' +
+        (x.note ? '<span>' + esc(x.note) + '</span>' : '') + '</div>' +
+        '<div class="amt num">' + peso(x.amt) + '<small>' + (x.src === 'online' ? 'Online' : 'Cash') + '</small></div></button>';
+    });
+    $('list').innerHTML = html || '<div class="empty">No expenses for this day yet. Fill in the form and tap Add expense.</div>';
+    var cash = sumOf(list, 'cash'), online = sumOf(list, 'online');
+    $('cashTotal').textContent = peso(cash);
+    $('onlineTotal').textContent = peso(online);
+    $('grandTotal').textContent = peso(cash + online);
+    var c = counted(selected), cl = $('cashline');
+    if (c > 0) {
+      cl.hidden = false;
+      cl.innerHTML = 'Cash counted this day <b class="num">' + peso(c) + '</b>. After cash expenses <b class="num">' + peso(c - cash) +
+        '</b>. <a href="money-counter.html">Open counter</a>';
+    } else { cl.hidden = true; }
+  }
+  $('list').addEventListener('click', function (e) { var b = e.target.closest('button[data-id]'); if (b) startEdit(b.getAttribute('data-id')); });
+  function goDay(k) { selected = k; resetForm(); paintDay(); }
+  $('prevDay').onclick = function () { goDay(shiftDay(selected, -1)); };
+  $('nextDay').onclick = function () { goDay(shiftDay(selected, 1)); };
+  $('when').onclick = function () { if (selected !== today) goDay(today); };
+
+  /* ---------- calendar ---------- */
+  function paintCal() {
+    $('monthTitle').textContent = MONTHS[viewM] + ' ' + viewY;
+    var first = new Date(Date.UTC(viewY, viewM, 1)).getUTCDay();
+    var count = new Date(Date.UTC(viewY, viewM + 1, 0)).getUTCDate();
+    var html = '', sum = 0, days = 0, byCat = {};
+    for (var i = 0; i < first; i++) html += '<div class="cell blank"></div>';
+    for (var d = 1; d <= count; d++) {
+      var key = viewY + '-' + pad(viewM + 1) + '-' + pad(d), list = dayList(key), tot = sumOf(list);
+      if (tot > 0) { sum += tot; days++; list.forEach(function (x) { byCat[x.cat] = (byCat[x.cat] || 0) + x.amt; }); }
+      html += '<button class="cell' + (key === today ? ' today' : '') + (key === selected ? ' sel' : '') + '" data-k="' + key + '">' +
+        '<span class="d num">' + d + '</span>' + (tot > 0 ? '<small class="num">' + pesoShort(tot) + '</small>' : '') + '</button>';
+    }
+    var tail = (7 - ((first + count) % 7)) % 7;
+    for (var j = 0; j < tail; j++) html += '<div class="cell blank"></div>';
+    $('days').innerHTML = html;
+    $('monthSum').innerHTML = days ? 'Month spent <b class="num">' + peso(sum) + '</b> over ' + days + (days === 1 ? ' day' : ' days') : 'No expenses this month';
+    var cats = Object.keys(byCat).sort(function (a, b) { return byCat[b] - byCat[a]; }), bd = '';
+    if (cats.length) {
+      bd = '<div class="bd-title">By category</div>';
+      cats.forEach(function (c) {
+        bd += '<div class="bd"><span>' + esc(c) + ' <small class="num">' + Math.round(byCat[c] / sum * 100) + '%</small></span><span class="num">' + peso(byCat[c]) + '</span></div>';
+      });
+    }
+    $('breakdown').innerHTML = bd;
+  }
+  $('days').addEventListener('click', function (e) { var b = e.target.closest('button[data-k]'); if (b) { goDay(b.getAttribute('data-k')); show('day'); } });
+  $('prevM').onclick = function () { viewM--; if (viewM < 0) { viewM = 11; viewY--; } paintCal(); };
+  $('nextM').onclick = function () { viewM++; if (viewM > 11) { viewM = 0; viewY++; } paintCal(); };
+
+  /* ---------- more ---------- */
+  function paintCats() {
+    var html = '';
+    store.cats.forEach(function (c, i) {
+      html += '<div class="catrow"><span>' + esc(c) + '</span><button class="x" data-i="' + i + '" aria-label="Remove ' + esc(c) + '">&times;</button></div>';
+    });
+    $('cats').innerHTML = html;
+  }
+  $('cats').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-i]'); if (!b) return;
+    if (store.cats.length <= 1) { toast('Keep at least one category'); return; }
+    var name = store.cats[+b.getAttribute('data-i')];
+    if (confirm('Remove "' + name + '"? Past expenses keep this name.')) {
+      store.cats.splice(+b.getAttribute('data-i'), 1);
+      if (store.lastCat === name) store.lastCat = '';
+      save(); paintCats(); fillCats(store.lastCat);
+    }
+  });
+  function addCat() {
+    var name = $('newCat').value.trim(); if (!name) return;
+    if (store.cats.indexOf(name) !== -1) { toast('Already in the list'); return; }
+    store.cats.push(name); $('newCat').value = ''; save(); paintCats(); fillCats(store.lastCat); toast('Category added');
+  }
+  $('addCat').onclick = addCat;
+  $('newCat').addEventListener('keydown', function (e) { if (e.key === 'Enter') addCat(); });
+
+  function download(name, text, type) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: type }));
+    a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  $('backup').onclick = function () { download('marina-bays-expenses-backup-' + todayPH() + '.json', JSON.stringify(store), 'application/json'); toast('Backup saved'); };
+  $('exportCsv').onclick = function () {
+    function q(s) { return '"' + String(s).replace(/"/g, '""') + '"'; }
+    var lines = ['Date,Category,Note,Paid from,Amount'];
+    Object.keys(store.days).sort().forEach(function (k) {
+      store.days[k].forEach(function (x) { lines.push([k, q(x.cat), q(x.note || ''), x.src === 'online' ? 'Online' : 'Cash', x.amt].join(',')); });
+    });
+    download('marina-bays-expenses.csv', lines.join('\n'), 'text/csv'); toast('CSV saved');
+  };
+  $('restore').onclick = function () { $('file').click(); };
+  $('file').onchange = function (e) {
+    var f = e.target.files[0]; if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () {
+      try {
+        var data = JSON.parse(rd.result);
+        if (!data || typeof data.days !== 'object') throw 0;
+        var n = Object.keys(data.days).length;
+        if (confirm('Load ' + n + ' days from this backup? Days with the same date will be replaced.')) {
+          Object.keys(data.days).forEach(function (k) { if (/^\d{4}-\d{2}-\d{2}$/.test(k) && Array.isArray(data.days[k])) store.days[k] = data.days[k]; });
+          (data.cats || []).forEach(function (c) { if (store.cats.indexOf(c) === -1) store.cats.push(c); });
+          save(); paintCats(); fillCats(store.lastCat); paintDay(); toast('Backup loaded');
+        }
+      } catch (err) { alert('That file is not a valid backup.'); }
+      $('file').value = '';
+    };
+    rd.readAsText(f);
+  };
+
+  /* ---------- tabs ---------- */
+  function show(v) {
+    document.querySelectorAll('.view').forEach(function (s) { s.classList.toggle('on', s.id === 'v-' + v); });
+    document.querySelectorAll('.tab').forEach(function (t) { t.classList.toggle('on', t.getAttribute('data-v') === v); });
+    $('totals').style.display = v === 'day' ? '' : 'none';
+    if (v === 'cal') { viewY = +selected.slice(0, 4); viewM = +selected.slice(5, 7) - 1; paintCal(); }
+    if (v === 'more') paintCats();
+    $('main').scrollTop = 0;
+  }
+  document.querySelectorAll('.tab').forEach(function (t) { t.onclick = function () { show(t.getAttribute('data-v')); }; });
+
+  /* ---------- receipt ---------- */
+  function num(n) { return Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function receipt(p) {
+    var list = dayList(selected), cash = sumOf(list, 'cash'), online = sumOf(list, 'online');
+    p.header('Daily expenses', toUTC(selected).toLocaleDateString('en-PH', { timeZone: 'UTC', weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }));
+    if (!list.length) p.center('No expenses');
+    list.forEach(function (x) {
+      p.row(x.cat, num(x.amt));
+      p.text('  ' + (x.src === 'online' ? 'Online' : 'Cash') + (x.note ? ' - ' + x.note : ''), { indent: '  ' });
+    });
+    p.rule();
+    p.row('Paid in cash', num(cash));
+    p.row('Paid online', num(online));
+    p.row('TOTAL SPENT', num(cash + online), { b: true });
+    p.footer();
+  }
+  var pb = $('printBtn');
+  pb.onclick = async function () {
+    var old = pb.textContent; pb.disabled = true; pb.textContent = 'Printing...';
+    try {
+      var m = await MBPrinter.print('expense', receipt);
+      if (m) toast(m);
+    } finally { pb.disabled = false; pb.textContent = old; }
+  };
+  MBPrinter.mount($('printerBox'));
+
+  // refresh the cash line when coming back from the counter
+  window.addEventListener('pageshow', function () { paintDay(); });
+  window.addEventListener('focus', function () { paintDay(); });
+
+  resetForm();
+  paintDay();
+
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>
