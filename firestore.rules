@@ -1,0 +1,46 @@
+// Marina Bay's Cafe: Firestore rules. Paste into Firebase console > Firestore > Rules, put your own emails in staff(), then Publish.
+// Test in the Rules Playground first. A wrong rule locks the cafe out. Changes apply right away.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Only these Google accounts (verified emails) may use the cafe data. Replace the examples.
+    function staff() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['owner@gmail.com', 'staff1@gmail.com'];
+    }
+    function names() {
+      return ['sync_menu', 'sync_inventory', 'sync_recipes', 'sync_counter', 'sync_sales',
+              'sync_shifts', 'sync_config', 'sync_invlog', 'sync_expenses'];
+    }
+    function validDoc() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['v', 'd', 'by', 's'])
+        && d.v is string && d.v.size() < 200000
+        && (d.d == 0 || d.d == 1)
+        && d.by == request.auth.token.email
+        && d.s == request.time;
+    }
+
+    // The synced cafe data. Records are never deleted from the cloud; a deleted record is marked (d = 1).
+    match /{coll}/{id} {
+      allow read: if staff() && coll in names();
+      allow create, update: if staff() && coll in names() && validDoc();
+      allow delete: if false;
+    }
+
+    // The public menu: ONE small document that anyone with the QR code can read, and only staff can write.
+    // Nobody can list the collection. It holds no costs, recipes, stock, sales or staff data (see menu-snapshot.js).
+    match /public_menu/{id} {
+      allow get: if id == 'current';
+      allow list: if false;
+      allow create, update: if staff() && id == 'current'
+        && request.resource.data.keys().hasOnly(['json', 'by', 't'])
+        && request.resource.data.json is string && request.resource.data.json.size() < 250000
+        && request.resource.data.by == request.auth.token.email
+        && request.resource.data.t == request.time;
+      allow delete: if false;
+    }
+  }
+}

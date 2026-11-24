@@ -1,5 +1,5 @@
 /* Copyright (c) 2026 Marina Bay's Cafe. All rights reserved. */
-var CACHE = 'mbc-v29';
+var CACHE = 'mbc-v37';
 var FILES = [
   './',
   './index.html',
@@ -7,6 +7,15 @@ var FILES = [
   './expenses.html',
   './printers.html',
   './pos.html',
+  './receipts.html',
+  './money.js',
+  './menu-snapshot.js',
+  './menu-public.html',
+  './qr-print.html',
+  './qrcode.js',
+  './storage-guard.js',
+  './tests.html',
+  './tests-money.js',
   './menu.html',
   './recipes.html',
   './inventory.html',
@@ -74,11 +83,11 @@ self.addEventListener('fetch', function (e) {
   // only handle our own files and the Firebase library files; leave all Firebase network traffic alone
   if (u.origin !== self.location.origin && u.hostname !== 'www.gstatic.com') return;
   e.respondWith(
-    caches.match(e.request).then(function (cached) {
+    caches.match(e.request, { ignoreSearch: true }).then(function (cached) {
       var net = fetch(e.request).then(function (res) {
-        if (res && res.ok) { var copy = res.clone(); caches.open(CACHE).then(function (c) { c.put(e.request, copy); }); }
+        if (res && res.ok) { var copy = res.clone(), key = (u.search && u.origin === self.location.origin) ? u.pathname : e.request; caches.open(CACHE).then(function (c) { c.put(key, copy); }); }
         return res;
-      }).catch(function () { return cached || caches.match('./index.html'); });
+      }).catch(function () { return cached || (e.request.mode === 'navigate' ? caches.match('./index.html') : Response.error()); });
       if (cached) { e.waitUntil(net.catch(function () {})); return cached; }
       return net;
     })

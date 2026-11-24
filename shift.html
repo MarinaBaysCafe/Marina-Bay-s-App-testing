@@ -151,6 +151,7 @@
     if (t.id === 'startBtn') {
       var v = $('stCash').value.trim();
       if (v === '' || isNaN(parseFloat(v)) || parseFloat(v) < 0) { D.toast('Enter the starting cash'); $('stCash').focus(); return; }
+      var w = S.syncWarning('start'); if (w && !confirm(w)) return;
       S.start(parseFloat(v), $('stBy').value); D.toast('Shift started'); paintShift();
     } else if (t.id === 'printLive') { var r = liveReport(); if (r) printReport(r); }
     else if (t.id === 'endBtn') openEnd();
@@ -184,6 +185,7 @@
     if (id === 'enOnly' || id === 'enPrint') {
       var v = $('enActual').value.trim();
       if (v === '' || isNaN(parseFloat(v)) || parseFloat(v) < 0) { D.toast('Enter the actual cash amount'); $('enActual').focus(); return; }
+      var cw = S.syncWarning('close'); if (cw && !confirm(cw)) return;
       var takeOut = true;
       var r = S.close($('enBy').value, parseFloat(v));
       S.settleShift(r.no); S.saveShifts();
@@ -191,11 +193,20 @@
       showDetail(r);
       if (id === 'enPrint') await printReport(r);
     } else if (id === 'saleRefund') {
-      if (confirm('Refund this order? It will be counted as a refund in the shift report.')) { S.refund(saleId); closeSheet(); paintSales(); D.toast('Order refunded'); }
+      var rs = S.sales().filter(function (x) { return x.id === saleId; })[0];
+      if (rs && confirm('Refund this order? It will be counted as a refund in the shift report.')) {
+        var g1 = await MBGuard.ask({ title: 'Refund order ' + rs.n, detail: N(rs.net) + ' will be counted as money returned.' });
+        if (!g1.ok) return;
+        if (S.refund(saleId)) { MBGuard.log('Refund', (rs.rno || 'Order ' + rs.n) + ' · ' + N(rs.net), g1.reason); closeSheet(); paintSales(); D.toast('Order refunded'); }
+        else D.toast('Could not refund this order. Storage may be full.');
+      }
     } else if (id === 'saleDel') {
       var ds = S.sales().filter(function (x) { return x.id === saleId; })[0];
       if (ds && confirm('Delete order ' + ds.n + ' (' + N(ds.net) + ') for good?\nIt is removed from sales and from this shift. If money was given back, use Refund instead.')) {
-        if (S.deleteSale(saleId)) { closeSheet(); paintSales(); D.toast('Order deleted'); } else D.toast('Could not delete this order');
+        var g2 = await MBGuard.ask({ title: 'Delete order ' + ds.n, detail: N(ds.net) + ' will be removed completely.' });
+        if (!g2.ok) return;
+        var lbl = (ds.rno || 'Order ' + ds.n) + ' · ' + N(ds.net);
+        if (S.deleteSale(saleId)) { MBGuard.log('Delete order', lbl, g2.reason); closeSheet(); paintSales(); D.toast('Order deleted'); } else D.toast('Could not delete this order');
       }
     } else if (id === 'salePrint') {
       var s = S.sales().filter(function (x) { return x.id === saleId; })[0];
@@ -227,7 +238,7 @@
     var body = s.lines.map(function (l) {
       var unit = l.price; l.addons.forEach(function (a) { unit += a.p; });
       var meta = []; if (l.opt) meta.push(l.opt); l.addons.forEach(function (a) { meta.push('+ ' + a.n); }); if (l.note) meta.push('Note: ' + l.note);
-      return row(l.qty + ' x ' + l.name, N(unit * l.qty), 0, meta.join(', '));
+      return row(l.qty + ' x ' + l.name, N(unit * l.qty), 0, meta.join(', ')) + (l.disc ? row('  ' + (l.dn || 'Discount'), '-' + N(l.disc)) : '');
     }).join('');
     if (s.disc) body += row('Discount', '-' + N(s.disc));
     body += row('Total', N(s.net), 1) + ((s.pays || []).map(function (x) { return row(x.name, N(x.amt)); }).join('')) + (S.cashOf(s) > 0 || s.pay === 'cash' ? row('Cash received', N(s.tend)) + row('Change', N(s.change)) : '');

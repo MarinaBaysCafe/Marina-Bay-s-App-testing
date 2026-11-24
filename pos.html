@@ -35,6 +35,20 @@
   .quick button { border: 1.5px solid #c9c1b5; background: #fff; border-radius: 6px; font: inherit; font-size: 14px; padding: 7px 12px; cursor: pointer; color: var(--ink); }
   .big { font-size: 30px; font-weight: 700; text-align: center; padding: 18px 16px 4px; }
   .bigsub { text-align: center; color: var(--muted); padding: 0 16px 16px; }
+  .swrow { position: relative; overflow: hidden; touch-action: pan-y; }
+  .sw-in { position: relative; background: #fff; transition: transform .18s ease; will-change: transform; }
+  .swrow.drag .sw-in { transition: none; }
+  .sw-del { position: absolute; right: 0; top: 0; bottom: 0; width: 88px; border: 0; background: var(--bad); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+  .line .l4 { display: flex; justify-content: flex-end; gap: 4px; }
+  .line .l4 button { min-height: 44px; }
+  .hrow { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); }
+  .hrow .prow { flex: 1; border-bottom: 0; }
+  .hrow .text-btn { min-height: 44px; align-self: center; margin-right: 8px; }
+  .undo { position: fixed; left: 50%; transform: translateX(-50%); bottom: 100px; z-index: 200; background: var(--ink); color: #fff; border-radius: 10px; padding: 2px 4px 2px 14px; display: none; align-items: center; gap: 8px; font-size: 14px; }
+  .undo.on { display: flex; }
+  .undo button { min-height: 44px; padding: 0 14px; background: transparent; border: 0; color: #9fe3d6; font: inherit; font-weight: 700; cursor: pointer; }
+  @media (prefers-reduced-motion: reduce) { .sw-in { transition: none; } }
+  s.was { color: var(--muted); font-weight: 400; font-size: .85em; margin-right: 4px; }
   .help2 { padding: 12px 16px; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--line); }
   .note-in { width: 100%; height: 42px; border: 1.5px solid #c9c1b5; border-radius: 6px; padding: 0 10px; font: inherit; }
   .note-in:focus { outline: none; border-color: var(--teal); }
@@ -61,7 +75,7 @@
 
   <div class="pos-body">
     <div class="pos-left">
-      <div class="searchbar"><input id="q" type="search" placeholder="Search the menu" autocomplete="off"><button class="ordbtn" id="drwBtn" type="button" style="display:none">Drawer</button><button class="ordbtn" id="ordBtn" type="button">Orders</button></div>
+      <div class="searchbar"><input id="q" type="search" placeholder="Search the menu" autocomplete="off"><button class="ordbtn" id="drwBtn" type="button" style="display:none">Drawer</button><button class="ordbtn" id="heldBtn" type="button" style="display:none">Held</button><button class="ordbtn" id="ordBtn" type="button">Orders</button></div>
       <div class="catbar" id="chips"></div>
       <main id="main"><div id="items"></div></main>
       <div class="cartbar"><button id="openCart" disabled><span id="cartCount">No items yet</span><b class="num" id="cartTotal">₱0</b></button></div>
@@ -72,12 +86,16 @@
   <div class="shade" id="shade"><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
 </div>
 <div class="toast" id="toast"></div>
+<div class="undo" id="undoBar" role="status" aria-live="polite"><span id="undoMsg"></span><button type="button" id="undoBtn">Undo</button></div>
 
 <script src="receipt-logo.js"></script>
 <script src="printer.js"></script>
 <script src="menu-default.js"></script>
 <script src="app-data.js"></script>
+<script src="storage-guard.js"></script>
+<script src="money.js"></script>
 <script src="shift-lib.js"></script>
+<script src="inv-log.js"></script>
 <script src="guard.js"></script>
 <script src="pos-config.js"></script>
 <script src="barcodes.js"></script>
@@ -88,6 +106,13 @@
   var cart = [];
   try { cart = JSON.parse(localStorage.getItem(CART_KEY)) || []; } catch (e) { cart = []; }
   function saveCart() { try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch (e) {} }
+  /* ---------- hold an order and come back to it ---------- */
+  var HELD_KEY = 'marinabays_held_v1', REM_KEY = 'marinabays_removed_v1', held = [], removed = [];
+  try { var h0 = JSON.parse(localStorage.getItem(HELD_KEY) || '[]'); held = Array.isArray(h0) ? h0 : []; } catch (e) { held = []; }
+  try { var r0 = JSON.parse(localStorage.getItem(REM_KEY) || '[]'); removed = Array.isArray(r0) ? r0 : []; } catch (e) { removed = []; }
+  function saveHeld() { try { localStorage.setItem(HELD_KEY, JSON.stringify(held)); return true; } catch (e) { return false; } }
+  function saveRemoved() { try { if (removed.length) localStorage.setItem(REM_KEY, JSON.stringify(removed)); else localStorage.removeItem(REM_KEY); } catch (e) {} }
+
   var fixing = null; // an earlier order being corrected: { id, label, disc }
   var TYPE_KEY = 'marinabays_ordertype_v1', orderType = 'dine';
   try { if (localStorage.getItem(TYPE_KEY) === 'take') orderType = 'take'; } catch (e) {}
@@ -264,9 +289,15 @@
   function lineUnit(l) { var t = Number(l.price) || 0; (l.addons || []).forEach(function (a) { t += Number(a.p) || 0; }); return t; }
   function lineTotal(l) { return lineUnit(l) * l.qty; }
   function cartTotal() { var t = 0; cart.forEach(function (l) { t += lineTotal(l); }); return t; }
+  var MM = window.MBMoney;
+  // the discount chosen on one line, in centavos (never more than the line)
+  function lineDiscC(l) { return l.ld ? MM.lineDiscount(MM.toC(lineTotal(l)), l.ld.kind, l.ld.value) : 0; }
+  function ldText(l) { return (l.ld.name || 'Discount') + (l.ld.kind === 'pct' && l.ld.name && !/%/.test(l.ld.name) ? ' ' + l.ld.value + '%' : ''); }
+  // order total after the discounts chosen on lines
+  function cartNet() { var t = MM.toC(cartTotal()); cart.forEach(function (l) { t -= lineDiscC(l); }); return MM.fromC(t); }
   function cartCount() { var n = 0; cart.forEach(function (l) { n += l.qty; }); return n; }
   function addLine(line) {
-    var same = cart.filter(function (l) { return l.k === line.k; })[0];
+    var same = cart.filter(function (l) { return l.k === line.k && !l.ld; })[0];
     if (same) same.qty += line.qty; else cart.push(line);
     saveCart(); paintBar();
   }
@@ -275,14 +306,14 @@
     var n = cartCount();
     $('openCart').disabled = n === 0;
     $('cartCount').textContent = n ? 'View order · ' + n + (n === 1 ? ' item' : ' items') : 'No items yet';
-    $('cartTotal').textContent = n ? D.pesoShort(cartTotal()) : '₱0';
+    $('cartTotal').textContent = n ? D.pesoShort(cartNet()) : '₱0';
     if (WIDE.matches) paintPanel();
   }
 
   /* ---------- sheet ---------- */
   var mode = '', sel = null;
   function openSheet() { $('shade').classList.add('on'); }
-  function closeSheet() { $('shade').classList.remove('on'); mode = ''; sel = null; }
+  function closeSheet() { $('shade').classList.remove('on'); mode = ''; sel = null; swOpenRow = null; }
   $('shade').addEventListener('click', function (e) { if (e.target === $('shade')) closeSheet(); });
 
   function openItem(id) {
@@ -337,23 +368,26 @@
     h += '<div class="otype"><div class="seg2"><button data-ot="dine" class="' + (orderType === 'dine' ? 'on' : '') + '">Dine in</button>' +
       '<button data-ot="take" class="' + (orderType === 'take' ? 'on' : '') + '">Take out</button></div></div>';
     if (fixing) h += '<div class="help2">Correcting ' + esc(fixing.label) + '. The old order is refunded when you complete this one.' +
-      (fixing.disc ? ' Enter the discount again (' + D.pesoShort(fixing.disc) + ') if it still applies.' : '') + '</div>';
-    if (!cart.length) h += '<div class="empty">The order is empty.</div>';
+      (fixing.disc ? ' Item discounts are kept. Enter the order discount again (' + D.pesoShort(fixing.disc) + ') if it still applies.' : '') + '</div>';
+    if (!cart.length) h += '<div class="empty">The order is empty.' + (held.length ? '<br><button class="text-btn" id="openHeld" style="min-height:44px">Held orders (' + held.length + ')</button>' : '') + '</div>';
     cart.forEach(function (l, i) {
       var meta = [];
       if (l.opt) meta.push(l.opt);
       (l.addons || []).forEach(function (a) { meta.push('+ ' + a.n); });
-      h += '<div class="line"><div class="l1"><b>' + esc(l.name) + '</b><span class="num">' + D.pesoShort(lineTotal(l)) + '</span></div>' +
+      var dC = lineDiscC(l);
+      h += '<div class="swrow"><button class="sw-del" data-rm="' + i + '" tabindex="-1" aria-hidden="true">Delete</button><div class="line sw-in"><div class="l1"><b>' + esc(l.name) + '</b><span class="num">' + (dC ? '<s class="was">' + D.pesoShort(lineTotal(l)) + '</s>' : '') + D.pesoShort(MM.fromC(MM.toC(lineTotal(l)) - dC)) + '</span></div>' +
         (meta.length ? '<div class="meta">' + esc(meta.join(', ')) + '</div>' : '') +
         (l.note ? '<div class="meta"><i>' + esc(l.note) + '</i></div>' : '') +
+        (dC ? '<div class="meta">' + esc(ldText(l)) + ' &minus;' + D.pesoShort(MM.fromC(dC)) + '</div>' : '') +
         '<div class="l3"><div class="stepper"><button data-l="' + i + '" data-d="-1" aria-label="Fewer">&minus;</button><b class="num">' + l.qty +
-        '</b><button data-l="' + i + '" data-d="1" aria-label="More">+</button></div><span class="meta num">' + D.pesoShort(lineUnit(l)) + ' each</span></div></div>';
+        '</b><button data-l="' + i + '" data-d="1" aria-label="More">+</button></div><span class="meta num">' + D.pesoShort(lineUnit(l)) + ' each</span></div><div class="l4"><button class="text-btn" data-ld="' + i + '">' + (l.ld ? 'Edit discount' : 'Discount') + '</button><button class="text-btn danger" data-rmb="' + i + '">Remove</button></div></div></div>';
     });
     h += '</div>';
     if (cart.length) {
-      h += '<div class="totalrow"><span>Total</span><span class="num">' + D.pesoShort(cartTotal()) + '</span></div>';
+      h += '<div class="totalrow"><span>Total</span><span class="num">' + D.pesoShort(cartNet()) + '</span></div>';
+      if (!fixing) h += '<div style="padding:0 16px 6px"><button class="text-btn" id="holdBtn" style="min-height:44px">Hold this order</button></div>';
       h += '<div class="sh-foot"><button class="text-btn danger" id="clearCart">Clear</button><button class="secondary" id="printOrder">Print order</button>' +
-        '<button class="primary" id="chargeBtn">Charge ' + D.pesoShort(cartTotal()) + '</button></div>';
+        '<button class="primary" id="chargeBtn">Charge ' + D.pesoShort(cartNet()) + '</button></div>';
     } else if (!panel) {
       h += '<div class="sh-foot"><button class="primary" data-close>Close</button></div>';
     }
@@ -368,15 +402,19 @@
   $('cartPanel').addEventListener('click', function (e) {
     var ot = e.target.closest('button[data-ot]');
     if (ot) { setType(ot.getAttribute('data-ot')); paintPanel(); return; }
+    var rb = e.target.closest('button[data-rm], button[data-rmb]');
+    if (rb) { removeLine(+(rb.getAttribute('data-rm') || rb.getAttribute('data-rmb'))); return; }
+    var ldb = e.target.closest('button[data-ld]');
+    if (ldb) { openLineDisc(+ldb.getAttribute('data-ld')); return; }
     var l = e.target.closest('button[data-l]');
     if (l) {
       var i = +l.getAttribute('data-l'); cart[i].qty += +l.getAttribute('data-d');
-      if (cart[i].qty <= 0) cart.splice(i, 1);
+      if (cart[i].qty <= 0) { removeLine(i); return; }
       saveCart(); paintBar(); return;
     }
     if (e.target.id === 'chargeBtn') { openCharge(); return; }
     if (e.target.id === 'printOrder') { printOrder(e.target); return; }
-    if (e.target.id === 'clearCart' && confirm('Clear the whole order?')) { cart = []; fixing = null; setType('dine'); saveCart(); paintBar(); }
+    if (e.target.id === 'clearCart' && confirm('Clear the whole order?')) { clearOrder(); }
   });
   /* ---------- print ---------- */
   function num(n) { return Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -395,16 +433,20 @@
     if (ot && mode === 'cart') { setType(ot.getAttribute('data-ot')); paintBar(); renderCart(); return; }
     var q = e.target.closest('button[data-q]');
     if (q && mode === 'item') { sel.qty = Math.max(1, Math.min(99, sel.qty + (+q.getAttribute('data-q')))); refreshItemFoot(); return; }
+    var rb = e.target.closest('button[data-rm], button[data-rmb]');
+    if (rb && mode === 'cart') { removeLine(+(rb.getAttribute('data-rm') || rb.getAttribute('data-rmb'))); return; }
+    var ldb = e.target.closest('button[data-ld]');
+    if (ldb && mode === 'cart') { openLineDisc(+ldb.getAttribute('data-ld')); return; }
     var l = e.target.closest('button[data-l]');
     if (l && mode === 'cart') {
       var i = +l.getAttribute('data-l'); cart[i].qty += +l.getAttribute('data-d');
-      if (cart[i].qty <= 0) cart.splice(i, 1);
+      if (cart[i].qty <= 0) { removeLine(i); return; }
       saveCart(); paintBar(); renderCart(); return;
     }
     if (e.target.id === 'chargeBtn') { openCharge(); return; }
     if (e.target.id === 'printOrder') { printOrder(e.target); return; }
     if (e.target.id === 'clearCart') {
-      if (confirm('Clear the whole order?')) { cart = []; fixing = null; setType('dine'); saveCart(); paintBar(); closeSheet(); }
+      if (confirm('Clear the whole order?')) { clearOrder(); closeSheet(); }
       return;
     }
     if (e.target.id === 'selAdd' && mode === 'item') {
@@ -429,23 +471,191 @@
   });
   $('sheet').addEventListener('input', function (e) { if (mode === 'item' && e.target.id === 'selNote') sel.note = e.target.value; });
 
+  /* ---------- remove an item, with Undo ---------- */
+  var undoT = null, undoFn = null;
+  function hideUndo() { clearTimeout(undoT); undoFn = null; $('undoBar').classList.remove('on'); }
+  function showUndo(msg, fn) { $('undoMsg').textContent = msg; undoFn = fn; $('undoBar').classList.add('on'); clearTimeout(undoT); undoT = setTimeout(hideUndo, 5000); }
+  $('undoBtn').addEventListener('click', function () { var f = undoFn; hideUndo(); if (f) f(); });
+  function removeLine(i) {
+    var l = cart[i]; if (!l) return;
+    cart.splice(i, 1);
+    var rec = { name: l.name, opt: l.opt || '', qty: l.qty, amt: S.r2(lineTotal(l)), t: Date.now() }; removed.push(rec); saveRemoved();
+    saveCart(); paintBar(); if (mode === 'cart') renderCart();
+    showUndo('Removed ' + l.name, function () {
+      cart.splice(Math.min(i, cart.length), 0, l); var k = removed.lastIndexOf(rec); if (k >= 0) removed.splice(k, 1); saveRemoved();
+      saveCart(); paintBar(); if (mode === 'cart') renderCart();
+    });
+  }
+  function clearOrder() {
+    if (cart.length) MBGuard.log('Cleared order', cart.map(function (l) { return l.qty + ' x ' + l.name; }).join(', ') + ' · ' + D.pesoShort(cartNet()), '');
+    cart = []; fixing = null; removed = []; saveRemoved(); setType('dine'); saveCart(); paintBar();
+  }
+
+  /* ---------- swipe a row left to show Delete (touch, mouse or pen). Up and down still scrolls. ---------- */
+  var SW_OPEN = -88, swOpenRow = null, swSwallow = false;
+  function swClose(row) { if (!row) return; var n = row.querySelector('.sw-in'); if (n) n.style.transform = ''; row.classList.remove('open', 'drag'); if (swOpenRow === row) swOpenRow = null; }
+  function swEngine(root) {
+    var g = null;
+    root.addEventListener('pointerdown', function (e) {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      var row = e.target.closest('.swrow');
+      if (swOpenRow && swOpenRow !== row) swClose(swOpenRow);
+      if (!row || e.target.closest('input, select, textarea, .sw-del')) { g = null; return; }
+      g = { row: row, inn: row.querySelector('.sw-in'), id: e.pointerId, x: e.clientX, y: e.clientY, base: row.classList.contains('open') ? SW_OPEN : 0, on: false, cur: row.classList.contains('open') ? SW_OPEN : 0 };
+    });
+    root.addEventListener('pointermove', function (e) {
+      if (!g || e.pointerId !== g.id) return;
+      var dx = e.clientX - g.x, dy = e.clientY - g.y;
+      if (!g.on) {
+        if (Math.abs(dy) > 10 && Math.abs(dy) >= Math.abs(dx)) { g = null; return; }       // mostly vertical: the list scrolls
+        if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy) * 1.5) return;                 // not clearly sideways yet
+        g.on = true; g.row.classList.add('drag'); try { g.row.setPointerCapture(e.pointerId); } catch (x) {}
+      }
+      g.cur = Math.max(SW_OPEN - 24, Math.min(0, g.base + dx)); g.inn.style.transform = 'translateX(' + g.cur + 'px)';
+    });
+    function end(e) {
+      if (!g || e.pointerId !== g.id) return;
+      var r = g; g = null; if (!r.on) return;
+      r.row.classList.remove('drag');
+      if (r.cur < SW_OPEN / 2) { r.inn.style.transform = 'translateX(' + SW_OPEN + 'px)'; r.row.classList.add('open'); swOpenRow = r.row; } else swClose(r.row);
+      swSwallow = true; setTimeout(function () { swSwallow = false; }, 80);
+    }
+    root.addEventListener('pointerup', end); root.addEventListener('pointercancel', end);
+    root.addEventListener('click', function (e) {       // a drag must not also press a button, and a tap on an open row only closes it
+      if (swSwallow) { e.stopPropagation(); e.preventDefault(); return; }
+      var row = e.target.closest('.swrow.open');
+      if (row && !e.target.closest('.sw-del') && !e.target.closest('.text-btn')) { swClose(row); e.stopPropagation(); e.preventDefault(); }
+    }, true);
+  }
+  swEngine($('sheet')); swEngine($('cartPanel'));
+
+  function paintHeld() { var b = $('heldBtn'); b.style.display = held.length ? '' : 'none'; b.textContent = 'Held (' + held.length + ')'; }
+  function heldHead(title, sub) { return '<div class="sh-head"><div class="t"><b>' + esc(title) + '</b><span>' + esc(sub) + '</span></div><button class="icon-btn" data-close aria-label="Close">&times;</button></div>'; }
+  function heldTotal(e) { var t = 0; (e.cart || []).forEach(function (l) { t += lineTotal(l); (l.ld) && (t -= MM.fromC(lineDiscC(l))); }); return S.r2(t); }
+  function openHold() {
+    if (!cart.length || fixing) return;
+    mode = 'hold';
+    $('sheet').innerHTML = heldHead('Hold this order', 'Give it a name or a table so you can find it again') +
+      '<div class="sh-body"><div class="block"><label for="holdName">Name or table (optional)</label><input class="note-in" id="holdName" type="text" maxlength="30" placeholder="For example, Table 4" autocomplete="off"></div></div>' +
+      '<div class="sh-foot"><button class="text-btn" data-close>Cancel</button><button class="primary" id="holdSave">Hold</button></div>';
+    openSheet(); setTimeout(function () { var i = $('holdName'); if (i) i.focus(); }, 50);
+  }
+  function holdCurrent(name) {
+    held.push({ id: D.uid('hold'), name: name || '', t: Date.now(), type: orderType, cart: cart, rm: removed });
+    if (!saveHeld()) { held.pop(); return false; }
+    cart = []; fixing = null; removed = []; saveRemoved(); setType('dine'); saveCart(); paintBar(); paintHeld(); return true;
+  }
+  function openHeld() {
+    mode = 'held';
+    var h = heldHead('Held orders', held.length + (held.length === 1 ? ' order' : ' orders')) + '<div class="sh-body">';
+    h += held.map(function (e) {
+      var n = (e.cart || []).reduce(function (t, l) { return t + l.qty; }, 0);
+      return '<div class="swrow"><button class="sw-del" data-hdel="' + esc(e.id) + '" tabindex="-1" aria-hidden="true">Delete</button><div class="sw-in hrow">' +
+        '<button class="prow" data-hid="' + esc(e.id) + '"><div class="what"><b>' + esc(e.name || 'Order') + '</b><span class="s">' + n + (n === 1 ? ' item' : ' items') + ' · ' + esc(S.fmtTime(e.t)) + ' · ' + esc(S.typeText(e.type)) + '</span></div><div class="r num">' + D.pesoShort(heldTotal(e)) + '</div></button>' +
+        '<button class="text-btn danger" data-hdel="' + esc(e.id) + '">Delete</button></div></div>';
+    }).join('') || '<div class="empty">No held orders.</div>';
+    $('sheet').innerHTML = h + '</div><div class="sh-foot"><button class="primary" data-close>Close</button></div>'; openSheet();
+  }
+  function deleteHeld(id) {
+    var i = held.map(function (e) { return e.id; }).indexOf(id); if (i < 0) return;
+    var e = held.splice(i, 1)[0]; saveHeld(); paintHeld(); if (held.length) openHeld(); else closeSheet();
+    showUndo('Deleted ' + (e.name || 'held order'), function () { held.splice(Math.min(i, held.length), 0, e); saveHeld(); paintHeld(); if (mode === 'held') openHeld(); });
+  }
+  function resumeHeld(id) {
+    if (fixing) { D.toast('Finish or clear the correction first'); return; }
+    var i = held.map(function (e) { return e.id; }).indexOf(id); if (i < 0) return;
+    if (cart.length) {
+      if (!confirm('The order you are making now will be put on hold.')) return;
+      var e0 = held[i]; if (!holdCurrent('')) { D.toast('Could not hold the current order. Storage may be full.'); return; }
+      i = held.map(function (e) { return e.id; }).indexOf(e0.id);
+    }
+    var e = held[i]; held.splice(i, 1); if (!saveHeld()) { held.splice(i, 0, e); D.toast('Could not save. Storage may be full.'); return; }
+    cart = e.cart || []; removed = e.rm || []; saveRemoved(); setType(e.type); saveCart(); paintBar(); paintHeld(); closeSheet(); D.toast('Order resumed');
+  }
+  $('heldBtn').addEventListener('click', openHeld);
+  function holdClicks(e) {
+    if (e.target.id === 'holdBtn') { openHold(); return true; }
+    if (e.target.id === 'openHeld') { openHeld(); return true; }
+    return false;
+  }
+  $('cartPanel').addEventListener('click', holdClicks);
+  $('sheet').addEventListener('click', function (e) {
+    if (mode === 'cart' && holdClicks(e)) return;
+    if (mode === 'hold' && e.target.id === 'holdSave') {
+      if (!holdCurrent($('holdName').value.trim())) { D.toast('Could not hold the order. Storage may be full.'); return; }
+      closeSheet(); D.toast('Order held'); return;
+    }
+    if (mode === 'held') {
+      var d = e.target.closest('[data-hdel]'); if (d) { deleteHeld(d.getAttribute('data-hdel')); return; }
+      var r = e.target.closest('button[data-hid]'); if (r) resumeHeld(r.getAttribute('data-hid'));
+    }
+  });
+  $('sheet').addEventListener('keydown', function (e) { if (mode === 'hold' && e.key === 'Enter' && e.target.id === 'holdName') { e.preventDefault(); $('holdSave').click(); } });
+  paintHeld();
+
+  /* ---------- discount on one item in the order ---------- */
+  var ldS = null;
+  function backToCart() { saveCart(); paintBar(); if (WIDE.matches) closeSheet(); else { mode = 'cart'; renderCart(); } }
+  function openLineDisc(i) {
+    var l = cart[i]; if (!l) return;
+    ldS = { i: i, kind: l.ld && l.ld.kind === 'fixed' ? 'fixed' : 'pct', value: l.ld && !l.ld.id ? String(l.ld.value) : '', reason: l.ld && l.ld.reason ? l.ld.reason : '' };
+    mode = 'ld'; renderLineDisc(); openSheet();
+  }
+  function renderLineDisc() {
+    var l = cart[ldS.i], cfg = CFG();
+    var h = '<div class="sh-head"><div class="t"><b>Discount</b><span>' + esc(l.name) + (l.opt ? ' (' + esc(l.opt) + ')' : '') + ' · ' + D.pesoShort(lineTotal(l)) + '</span></div><button class="icon-btn" data-close aria-label="Close">&times;</button></div><div class="sh-body">';
+    h += '<div class="sect">Quick discounts</div><div class="quick">' + cfg.discounts.map(function (p) { return '<button data-ldp="' + esc(p.id) + '">' + esc(p.name) + ' ' + p.pct + '%</button>'; }).join('') + '</div>';
+    h += '<div class="sect">Other amount</div><div class="frow"><div class="seg2"><button data-ldk="pct" class="' + (ldS.kind === 'pct' ? 'on' : '') + '">%</button><button data-ldk="fixed" class="' + (ldS.kind === 'fixed' ? 'on' : '') + '">₱</button></div>' +
+      '<input class="field num" id="ldVal" style="max-width:110px" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0" value="' + esc(ldS.value) + '"></div>';
+    h += '<div class="block"><label for="ldWhy">Reason (optional)</label><input class="note-in" id="ldWhy" type="text" maxlength="60" placeholder="For example, loyal customer" value="' + esc(ldS.reason) + '" autocomplete="off"></div>';
+    h += '<div class="totalrow"><span>Discount</span><span class="num" id="ldAmt"></span></div><div class="totalrow"><span>This item after discount</span><span class="num" id="ldNew"></span></div>';
+    h += '</div><div class="sh-foot">' + (l.ld ? '<button class="text-btn danger" id="ldRemove">Remove</button>' : '<button class="text-btn" id="ldBack">Back</button>') + '<button class="primary" id="ldApply">Apply</button></div>';
+    $('sheet').innerHTML = h; refreshLd();
+  }
+  function ldCents() { return MM.lineDiscount(MM.toC(lineTotal(cart[ldS.i])), ldS.kind, parseFloat(ldS.value) || 0); }
+  function refreshLd() { var l = cart[ldS.i], c = ldCents(); $('ldAmt').textContent = c ? '-' + money(MM.fromC(c)) : '₱0.00'; $('ldNew').textContent = money(MM.fromC(MM.toC(lineTotal(l)) - c)); }
+  $('sheet').addEventListener('input', function (e) {
+    if (mode !== 'ld') return;
+    if (e.target.id === 'ldVal') { ldS.value = e.target.value; refreshLd(); } else if (e.target.id === 'ldWhy') ldS.reason = e.target.value;
+  });
+  $('sheet').addEventListener('click', async function (e) {
+    if (mode !== 'ld') return;
+    var l = cart[ldS.i]; if (!l) { backToCart(); return; }
+    var p = e.target.closest('button[data-ldp]'), k = e.target.closest('button[data-ldk]');
+    if (p) { var pr = CFG().discounts.filter(function (x) { return x.id === p.getAttribute('data-ldp'); })[0]; if (pr) { l.ld = { kind: 'pct', value: pr.pct, id: pr.id, name: pr.name }; backToCart(); } return; }
+    if (k) { ldS.kind = k.getAttribute('data-ldk'); renderLineDisc(); return; }
+    if (e.target.id === 'ldBack') { backToCart(); return; }
+    if (e.target.id === 'ldRemove') { delete l.ld; backToCart(); return; }
+    if (e.target.id === 'ldApply') {
+      var v = parseFloat(ldS.value) || 0, c = ldCents();
+      if (v <= 0 || c <= 0) { D.toast('Enter a discount amount'); return; }
+      var pct = c / MM.toC(lineTotal(l)) * 100, lim = (CFG().discRules || {}).limitPct || 0, why = ldS.reason.trim();
+      if (pct > lim) {          // a typed-in discount above the limit needs the PIN
+        var g = await MBGuard.ask({ title: 'Manual discount', detail: l.name + ': ' + money(MM.fromC(c)) + ' off (' + pct.toFixed(1) + '%).' });
+        if (!g.ok) return;
+        if (!why) why = g.reason || '';
+      }
+      l.ld = { kind: ldS.kind, value: v, id: '', name: ldS.kind === 'pct' ? v + '%' : 'Discount', reason: why };
+      backToCart();
+    }
+  });
+
   /* ---------- charge ---------- */
   var S = window.MBShift, pay = null, lastSale = null;
   function money(n) { return D.peso(n); }
   function CFG() { return window.MBConfig.get(); }
   function payNums() {
-    var cfg = CFG(), gross = S.r2(cartTotal()), recs = [], allPct = 0, linePct = {};
+    var cfg = CFG(), gross = S.r2(cartTotal()), presets = [];
     Object.keys(pay.dsel).forEach(function (id) {
       var pr = cfg.discounts.filter(function (x) { return x.id === id; })[0], sc = pay.dsel[id]; if (!pr) return;
-      if (sc === 'all' || !cart[sc]) { allPct += pr.pct; sc = 'all'; } else linePct[sc] = (linePct[sc] || 0) + pr.pct;
-      recs.push({ id: id, name: pr.name, pct: pr.pct, item: sc === 'all' ? '' : cart[sc].name });
+      presets.push({ id: id, name: pr.name, pct: pr.pct, scope: (sc === 'all' || !cart[sc]) ? 'all' : +sc });
     });
-    var d = gross * Math.min(allPct, 100) / 100;
-    Object.keys(linePct).forEach(function (i) { d += lineTotal(cart[i]) * Math.min(linePct[i], 100) / 100; });
     var v = parseFloat(pay.disc) || 0;
-    var man = pay.dt === 'pct' ? gross * Math.min(Math.max(v, 0), 100) / 100 : Math.max(v, 0);
-    if (man > 0) recs.push({ id: 'manual', name: 'Discount', pct: pay.dt === 'pct' ? v : 0 });
-    d = S.r2(Math.min(d + man, gross));
+    // line discounts first, then the toggles and the "Other discount" on what is left (see MBMoney.orderDiscount)
+    var od = MM.orderDiscount({ lines: cart.map(function (l) { return { totalC: MM.toC(lineTotal(l)), ld: l.ld || null }; }), presets: presets,
+      manual: v > 0 ? { kind: pay.dt === 'pct' ? 'pct' : 'peso', value: v } : null, rules: { stack: !(cfg.discRules && cfg.discRules.stack === false) } });
+    var d = MM.fromC(od.totalC), lineDisc = od.lineC.map(MM.fromC);
+    var recs = od.recs.map(function (r) { return { id: r.id, name: r.name, pct: r.pct, item: (typeof r.line === 'number' && cart[r.line]) ? cart[r.line].name : '', amt: MM.fromC(r.amtC), kind: r.kind }; });
     var net = S.r2(gross - d), nonCash = 0, cashIn = null;
     cfg.methods.forEach(function (m) {
       var raw = pay.amt[m.id], a = parseFloat(raw) || 0;
@@ -453,7 +663,7 @@
     });
     nonCash = S.r2(nonCash);
     var cashDue = S.r2(Math.max(0, net - nonCash)), tend = cashIn === null ? cashDue : cashIn;
-    return { gross: gross, d: d, net: net, recs: recs, nonCash: nonCash, cashDue: cashDue, tend: tend, change: S.r2(tend - cashDue), over: nonCash > net + 0.004 };
+    return { gross: gross, d: d, net: net, recs: recs, lineDisc: lineDisc, nonCash: nonCash, cashDue: cashDue, tend: tend, change: S.r2(tend - cashDue), over: nonCash > net + 0.004 };
   }
   function openCharge() {
     if (!cart.length) return;
@@ -474,6 +684,7 @@
           cart.map(function (l, i) { return '<option value="' + i + '"' + (String(pay.dsel[pr.id]) === String(i) ? ' selected' : '') + '>' + esc(l.name) + (l.opt ? ' (' + esc(l.opt) + ')' : '') + '</option>'; }).join('') + '</select></div>';
       }
     });
+    h += '<div class="help2" id="stackNote" style="display:none">Several discounts on the same part: only the biggest counts. To add them up, allow it in Settings.</div>';
     h += '<div class="frow"><label for="payDisc">Other discount</label><div class="seg2"><button data-dt="peso" class="' + (pay.dt === 'peso' ? 'on' : '') + '">₱</button>' +
       '<button data-dt="pct" class="' + (pay.dt === 'pct' ? 'on' : '') + '">%</button></div>' +
       '<input class="field num" id="payDisc" style="max-width:110px" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0" value="' + esc(pay.disc) + '"></div>';
@@ -492,7 +703,12 @@
     $('sheet').innerHTML = h; refreshPay();
   }
   function refreshPay() {
-    var n = payNums();
+    var n = payNums(), sn = $('stackNote');
+    if (sn) {          // stacking is switched off in Settings and two toggles cover the same part
+      var grp = {}, many = false, off = !!(CFG().discRules && CFG().discRules.stack === false);
+      Object.keys(pay.dsel).forEach(function (id) { var sc = pay.dsel[id], key = (sc === 'all' || !cart[sc]) ? 'all' : String(sc); grp[key] = (grp[key] || 0) + 1; if (grp[key] > 1) many = true; });
+      sn.style.display = many && off ? '' : 'none';
+    }
     $('payNet').textContent = money(n.net); $('payDiscAmt').textContent = n.d ? '-' + money(n.d) : '₱0.00';
     $('payGo').textContent = 'Complete sale · ' + D.pesoShort(n.net);
     var short = n.tend < n.cashDue;
@@ -525,12 +741,14 @@
       var splits = cfg.methods.map(function (m) {
         return { id: m.id, name: m.name, cash: m.id === 'cash', amt: m.id === 'cash' ? n.tend : (parseFloat(pay.amt[m.id]) || 0) };
       });
-      var sale = S.makeSale(cart, { disc: n.d, discs: n.recs, splits: splits, type: orderType });
+      var sale = S.makeSale(cart, { disc: n.d, discs: n.recs, lineDisc: n.lineDisc, splits: splits, type: orderType });
       if (fixing) sale.fix = fixing.id;
+      if (removed.length) sale.removed = removed.slice(0, 30);     // items taken out of the order before it was paid
       if (!S.addSale(sale)) { D.toast('Could not save the sale. Storage may be full.'); return; }
-      if (manual) MBGuard.log('Manual discount', 'Order ' + sale.n + ' · discount ' + money(n.d) + ' of ' + money(n.gross), why);
+      if (manual) MBGuard.log('Manual discount', (sale.rno || 'Order ' + sale.n) + ' · discount ' + money(n.d) + ' of ' + money(n.gross), why);
+      sale.lines.forEach(function (l) { if (l.disc && !l.di) MBGuard.log('Manual discount', (sale.rno || 'Order ' + sale.n) + ' · ' + l.name + ' · -' + money(l.disc), l.dr || ''); });
       if (fixing) { S.refund(fixing.id); fixing = null; }
-      lastSale = sale; cart = []; setType('dine'); saveCart(); paintBar(); paintOrdBtn();
+      lastSale = sale; cart = []; removed = []; saveRemoved(); setType('dine'); saveCart(); paintBar(); paintOrdBtn();
       mode = 'done'; renderDone();
       var cash = S.cashOf(sale) > 0;
       if (cfg.autoPrint) {
@@ -565,6 +783,7 @@
   function doStart() {
     var v = $('stCash').value.trim();
     if (v === '' || isNaN(parseFloat(v)) || parseFloat(v) < 0) { D.toast('Enter the starting cash'); $('stCash').focus(); return; }
+    var w = S.syncWarning('start'); if (w && !confirm(w)) return;
     S.start(parseFloat(v), $('stBy').value);
     openCharge();
   }
@@ -612,12 +831,27 @@
       '<button class="icon-btn" data-hd="-1" aria-label="Earlier day">&#8249;</button><button class="icon-btn" data-hd="1" aria-label="Later day"' + (isToday ? ' disabled' : '') + '>&#8250;</button>' +
       '<button class="icon-btn" data-close aria-label="Close">&times;</button></div><div class="sh-body">';
     h += list.map(function (s) {
-      return '<button class="prow" data-oid="' + esc(s.id) + '"><div class="what"><b>' + esc(saleLabel(s)) + ' · ' + esc(S.fmtTime(s.t)) +
+      var row = '<button class="prow" data-oid="' + esc(s.id) + '"><div class="what"><b>' + esc(saleLabel(s)) + ' · ' + esc(S.fmtTime(s.t)) +
         (s.ref ? '<span class="badge warn">Refunded</span>' : '') + '</b><span class="s">' + esc(S.typeText(s.type)) + ' · ' + esc(linesText(s)) + '</span></div><div class="r num">' + D.pesoShort(s.net) + '</div></button>';
+      // orders of the open shift can be swiped to delete (PIN needed); older ones can only be refunded
+      return S.current() && s.shift === S.current().no ? '<div class="swrow"><button class="sw-del" data-odel="' + esc(s.id) + '" tabindex="-1" aria-hidden="true">Delete</button><div class="sw-in">' + row + '</div></div>' : row;
     }).join('') || '<div class="empty">No orders on this day.</div>';
-    h += '</div><div class="sh-foot"><button class="primary" data-close>Close</button></div>';
+    h += '</div><div class="sh-foot"><a class="text-btn" href="receipts.html" style="min-height:44px;display:inline-flex;align-items:center">All receipts</a><button class="primary" data-close>Close</button></div>';
     $('sheet').innerHTML = h;
   }
+  // delete an order of the open shift for good: confirm, PIN, and a line in the activity log
+  async function deleteOrder(s) {
+    if (!confirm('Delete ' + saleLabel(s) + ' (' + money(s.net) + ') for good?\nIt is removed from sales and from this shift, as if it never happened. If money was given back, use Refund instead.')) return;
+    var g2 = await MBGuard.ask({ title: 'Delete ' + saleLabel(s), detail: money(s.net) + ' will be removed completely.' });
+    if (!g2.ok) return;
+    var lbl = saleLabel(s) + ' · ' + money(s.net) + ' · ' + linesText(s);
+    if (S.deleteSale(s.id)) { MBGuard.log('Delete order', lbl, g2.reason); hId = null; paintOrdBtn(); renderHist(); D.toast('Order deleted'); } else D.toast('Could not delete this order');
+  }
+  $('sheet').addEventListener('click', function (e) {
+    if (mode !== 'hist') return;
+    var b = e.target.closest('button[data-odel]'); if (!b) return;
+    var s = saleById(b.getAttribute('data-odel')); if (s) deleteOrder(s);
+  });
   function renderOrd(id) {
     var s = saleById(id); if (!s) { renderHist(); return; }
     mode = 'ord'; hId = id;
@@ -627,7 +861,8 @@
       var unit = l.price; (l.addons || []).forEach(function (a) { unit += a.p; });
       var meta = []; if (l.opt) meta.push(l.opt); (l.addons || []).forEach(function (a) { meta.push('+ ' + a.n); });
       h += '<div class="line"><div class="l1"><b>' + l.qty + ' x ' + esc(l.name) + '</b><span class="num">' + D.pesoShort(unit * l.qty) + '</span></div>' +
-        (meta.length ? '<div class="meta">' + esc(meta.join(', ')) + '</div>' : '') + (l.note ? '<div class="meta"><i>' + esc(l.note) + '</i></div>' : '') + '</div>';
+        (meta.length ? '<div class="meta">' + esc(meta.join(', ')) + '</div>' : '') + (l.note ? '<div class="meta"><i>' + esc(l.note) + '</i></div>' : '') +
+        (l.disc ? '<div class="meta">' + esc(l.dn || 'Discount') + ' &minus;' + D.pesoShort(l.disc) + '</div>' : '') + '</div>';
     });
     if (s.disc) h += '<div class="line"><div class="l1"><span>Discount</span><span class="num">-' + D.pesoShort(s.disc) + '</span></div></div>';
     h += '<div class="totalrow"><span>Total</span><span class="num">' + money(s.net) + '</span></div>' +
@@ -643,9 +878,11 @@
     cart = s.lines.map(function (l, i) {
       var it = items.filter(function (x) { return x.name === l.name; })[0];
       return { name: l.name, opt: l.opt || '', price: l.price, addons: (l.addons || []).map(function (a) { return { n: a.n, p: a.p }; }), note: l.note || '', qty: l.qty,
-               cat: it ? it.cat : undefined, k: 'fix|' + i + '|' + Date.now() };
+               cat: it ? it.cat : undefined, k: 'fix|' + i + '|' + Date.now(),
+               ld: l.disc && l.dk ? { kind: l.dk, value: l.dv, id: l.di || '', name: l.dn || '', reason: l.dr || '' } : undefined };
     });
-    setType(s.type); fixing = { id: s.id, label: saleLabel(s), disc: s.disc || 0 };
+    var lineSum = 0; s.lines.forEach(function (l) { lineSum += l.disc || 0; });
+    setType(s.type); fixing = { id: s.id, label: saleLabel(s), disc: S.r2(Math.max(0, (s.disc || 0) - lineSum)) };
     saveCart(); closeSheet(); paintBar();
     D.toast('Order loaded. Change it, then charge.');
     if (!WIDE.matches) { mode = 'cart'; renderCart(); openSheet(); }
@@ -662,16 +899,12 @@
       if (confirm('Refund ' + saleLabel(s) + ' for ' + money(s.net) + '? This cannot be undone.')) {
         var g1 = await MBGuard.ask({ title: 'Refund ' + saleLabel(s), detail: money(s.net) + ' will be counted as money returned.' });
         if (!g1.ok) return;
-        S.refund(s.id); MBGuard.log('Refund', saleLabel(s) + ' · ' + money(s.net), g1.reason);
+        if (!S.refund(s.id)) { D.toast('Could not refund this order. Storage may be full.'); return; }
+        MBGuard.log('Refund', saleLabel(s) + ' · ' + money(s.net), g1.reason);
         paintOrdBtn(); renderOrd(s.id); D.toast('Order refunded');
       }
     } else if (t.id === 'ordDel') {
-      if (confirm('Delete ' + saleLabel(s) + ' (' + money(s.net) + ') for good?\nIt is removed from sales and from this shift, as if it never happened. If money was given back, use Refund instead.')) {
-        var g2 = await MBGuard.ask({ title: 'Delete ' + saleLabel(s), detail: money(s.net) + ' will be removed completely.' });
-        if (!g2.ok) return;
-        var lbl = saleLabel(s) + ' · ' + money(s.net) + ' · ' + linesText(s);
-        if (S.deleteSale(s.id)) { MBGuard.log('Delete order', lbl, g2.reason); hId = null; paintOrdBtn(); renderHist(); D.toast('Order deleted'); } else D.toast('Could not delete this order');
-      }
+      deleteOrder(s);
     } else if (t.id === 'ordFix') {
       var g3 = await MBGuard.ask({ title: 'Correct ' + saleLabel(s), detail: 'The old order is refunded and a new one is opened.' });
       if (!g3.ok) return;
@@ -680,7 +913,7 @@
     }
     else if (t.id === 'ordPrint') {
       var old = t.textContent; t.disabled = true; t.textContent = 'Printing...';
-      try { var m = await MBPrinter.print('pos', function (p) { S.saleReceipt(p, s); }); if (m) D.toast(m); }
+      try { var m = await MBPrinter.print('pos', function (p) { p.center('*** REPRINT ***'); S.saleReceipt(p, s); }); MBGuard.log('Reprint', saleLabel(s) + ' · ' + money(s.net), ''); if (m) D.toast(m); }
       finally { t.disabled = false; t.textContent = old; }
     }
   });
@@ -694,6 +927,20 @@
   };
   paintDrw();
   paintChips(); paintItems(); paintBar(); paintOrdBtn();
+  // opened from the Receipts page to correct an order
+  (function () {
+    var m = /[?&]fix=([^&]+)/.exec(location.search); if (!m) return;
+    try { history.replaceState(null, '', 'pos.html'); } catch (e) {}
+    var s = saleById(decodeURIComponent(m[1]));
+    if (!s || s.ref) { D.toast('That order cannot be corrected'); return; }
+    if (!S.current()) { D.toast('Start a shift first, then correct the order from Receipts'); return; }
+    (async function () {
+      var g = await MBGuard.ask({ title: 'Correct ' + saleLabel(s), detail: 'The old order is refunded and a new one is opened.' });
+      if (!g.ok) return;
+      MBGuard.log('Correct order', saleLabel(s) + ' · ' + money(s.net), g.reason);
+      correctOrder(s);
+    })();
+  })();
   try { MBPrinter.warm(); } catch (e) {}
   window.addEventListener('pageshow', function () { paintChips(); paintItems(); paintOrdBtn(); });
 

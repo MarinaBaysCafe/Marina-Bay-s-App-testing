@@ -11,7 +11,8 @@
         { id: 'senior', name: 'Senior Citizen', pct: 20 },
         { id: 'employee', name: 'Employee', pct: 10 }
       ],
-      units: ['pcs', 'box', 'pack', 'bottle']
+      units: ['pcs', 'box', 'pack', 'bottle'],
+      discRules: { stack: true, limitPct: 0 }   // stack: several discounts may be added up. limitPct: a manual discount above this percent needs the PIN (0 = always)
     };
   }
   function load() {
@@ -21,6 +22,10 @@
       if (v) {
         if (typeof v.autoPrint === 'boolean') d.autoPrint = v.autoPrint;
         ['methods', 'discounts', 'units'].forEach(function (k) { if (Array.isArray(v[k]) && v[k].length) d[k] = v[k]; });
+        if (v.discRules && typeof v.discRules === 'object') {
+          if (typeof v.discRules.stack === 'boolean') d.discRules.stack = v.discRules.stack;
+          var lp = Number(v.discRules.limitPct); if (isFinite(lp) && lp >= 0 && lp <= 100) d.discRules.limitPct = lp;
+        }
       }
     } catch (e) {}
     if (!d.methods.some(function (m) { return m.id === 'cash'; })) d.methods.unshift(defaults().methods[0]);

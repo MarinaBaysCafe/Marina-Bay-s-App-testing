@@ -56,7 +56,7 @@
     <div class="sect">How it works</div>
     <div class="about">
       <p>Every change is saved on the phone first, so the apps work without internet. When there is a connection, changes are copied to the cloud and the other phones get them.</p>
-      <p>Menu, inventory, daily inventory record, settings (payment methods, discounts, units), recipes, counted cash, and expenses are synced. Printer settings, the PIN, and the open order stay on each phone.</p>
+      <p>Menu, sales, shifts, inventory, daily inventory record, settings (payment methods, discounts, units), recipes, counted cash, and expenses are synced. Printer settings, the PIN, and the open order stay on each phone.</p>
       <p>If two phones change the same item, the one saved last wins. When another phone changes something you are looking at, a bar at the top asks you to refresh.</p>
     </div>
   </main>
@@ -67,7 +67,7 @@
 <script>
 (function () {
   var C = window.MBCloud, D = window.MBData, $ = function (id) { return document.getElementById(id); };
-  var LABEL = { menu: 'Menu', inventory: 'Inventory', recipes: 'Recipes', counter: 'Money counter', expenses: 'Expenses', config: 'Settings', invlog: 'Daily inventory' };
+  var LABEL = { sales: 'Sales', shifts: 'Shifts', menu: 'Menu', inventory: 'Inventory', recipes: 'Recipes', counter: 'Money counter', expenses: 'Expenses', config: 'Settings', invlog: 'Daily inventory' };
   function when(t) { return t ? new Date(t).toLocaleString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''; }
 
   function paint() {

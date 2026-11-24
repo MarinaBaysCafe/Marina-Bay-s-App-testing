@@ -61,6 +61,7 @@
 <script src="menu-default.js"></script>
 <script src="inventory-default.js"></script>
 <script src="app-data.js"></script>
+<script src="storage-guard.js"></script>
 <script src="shift-lib.js"></script>
 <script>
 (function () {
@@ -68,6 +69,8 @@
   var KEYS = { menu: 'marinabays_menu_v1', inventory: 'marinabays_inventory_v1', recipes: 'marinabays_recipes_v1', counter: 'marinabays_money_v1',
                expenses: 'marinabays_expenses_v1', sales: 'marinabays_sales_v1', shifts: 'marinabays_shifts_v1', config: 'marinabays_config_v1', invlog: 'marinabays_invlog_v2' };
 
+  var protectedText = 'checking...';
+  if (window.MBStorage) MBStorage.persist().then(function (p) { protectedText = p === true ? 'Yes' : (p === false ? 'No. Install the app to the home screen to help' : 'Not known on this browser'); paintStats(); });
   function paintStats() {
     var inv = D.getInventory().items, m = D.getMenu(), idx = S.index(), days = Object.keys(idx).length;
     var rows = [
@@ -76,7 +79,9 @@
       ['Recipes', D.getRecipes().recipes.length + ''],
       ['Sales', S.sales().length + ' orders'],
       ['Shifts', S.shifts().hist.length + ' closed' + (S.current() ? ', 1 open' : '')],
-      ['Days with records', String(days)]
+      ['Days with records', String(days)],
+      ['Storage used', window.MBStorage ? MBStorage.text() : 'not known'],
+      ['Protected from automatic cleanup', protectedText]
     ];
     $('stats').innerHTML = rows.map(function (r) { return '<div class="stat"><span>' + r[0] + '</span><span>' + r[1] + '</span></div>'; }).join('');
     $('syncWarn').hidden = !(window.MBCloud && window.MBCloud.status().user);

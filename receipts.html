@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<!-- Copyright (c) 2026 Marina Bay's Cafe. All rights reserved. -->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="security.js"></script>
+<script src="firebase-config.js"></script>
+<script src="cloud.js" data-uses="sales,shifts"></script>
+<meta name="robots" content="noindex, nofollow">
+<meta name="author" content="Marina Bay's Cafe">
+<meta name="copyright" content="Copyright 2026 Marina Bay's Cafe. All rights reserved.">
+<title>Receipts | Marina Bay's Cafe</title>
+<meta name="theme-color" content="#0d3a4e">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/counter-apple-touch-icon.png">
+<link rel="stylesheet" href="app.css">
+<style>
+  .filters { padding: 10px 16px 8px; border-bottom: 1px solid var(--line); }
+  .filters input[type=search] { width: 100%; min-height: 44px; border: 1.5px solid #c9c1b5; border-radius: 6px; padding: 0 12px; font: inherit; font-size: 16px; background: #fff; }
+  .fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin-top: 10px; }
+  .fgrid label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+  .fgrid select, .fgrid input[type=date] { width: 100%; min-height: 44px; border: 1.5px solid #c9c1b5; border-radius: 6px; padding: 0 8px; font: inherit; font-size: 15px; background: #fff; }
+  .sumrow { padding: 10px 16px; font-size: 14px; color: var(--muted); border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  .sumrow b { color: var(--ink); }
+  .rrow { display: flex; justify-content: space-between; gap: 12px; padding: 9px 16px; border-top: 1px solid var(--line); font-size: 15px; }
+  .rrow small { display: block; font-size: 12px; color: var(--muted); }
+  .trail { padding: 6px 16px 10px; font-size: 13px; color: var(--muted); }
+  .trail div { padding: 3px 0; }
+  .totalrow { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 16px; font-size: 17px; font-weight: 700; border-top: 1px solid var(--line); }
+  s.was { color: var(--muted); font-weight: 400; font-size: .85em; margin-right: 4px; }
+</style>
+</head>
+<body class="pg-narrow">
+<div class="app">
+  <div class="top"><a href="index.html" class="icon-btn" aria-label="Back">&#8249;</a><div><b>Receipts</b><span class="sub" id="subTitle"></span></div></div>
+  <div class="filters">
+    <input type="search" id="q" placeholder="Receipt no., item, amount, employee, payment" autocomplete="off" aria-label="Search receipts">
+    <div class="fgrid">
+      <div><label for="fStatus">Status</label><select id="fStatus"><option value="all">All</option><option value="paid">Paid</option><option value="ref">Refunded</option></select></div>
+      <div><label for="fType">Dining</label><select id="fType"><option value="all">All</option><option value="dine">Dine in</option><option value="take">Take out</option></select></div>
+      <div><label for="fDisc">Discount</label><select id="fDisc"></select></div>
+      <div><label for="fShift">Shift</label><select id="fShift"></select></div>
+    </div>
+  </div>
+  <div class="chips" id="chips">
+    <button class="chip on" data-r="today">Today</button><button class="chip" data-r="7">7 days</button><button class="chip" data-r="30">30 days</button><button class="chip" data-r="all">All time</button><button class="chip" data-r="custom">Pick dates</button>
+  </div>
+  <div class="filters" id="dates" style="display:none"><div class="fgrid"><div><label for="fFrom">From</label><input type="date" id="fFrom"></div><div><label for="fTo">To</label><input type="date" id="fTo"></div></div></div>
+  <div class="sumrow"><span id="sum"></span><button class="text-btn" id="csv" style="min-height:44px">Export CSV</button></div>
+  <main id="list"></main>
+  <div class="shade" id="shade"><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="receipt-logo.js"></script>
+<script src="printer.js"></script>
+<script src="menu-default.js"></script>
+<script src="inventory-default.js"></script>
+<script src="app-data.js"></script>
+<script src="shift-lib.js"></script>
+<script src="guard.js"></script>
+<script>
+(function () {
+  var S = window.MBShift, D = window.MBData, esc = D.esc, N = D.peso, $ = function (id) { return document.getElementById(id); };
+  var today = S.phDate(Date.now());
+  var st = { q: '', range: 'today', from: '', to: '', status: 'all', type: 'all', disc: 'all', shift: 'all', limit: 50 };
+  var hayC = {}, dayC = {}, openId = null;
+
+  function addDays(k, n) { var d = new Date(k + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+  function label(s) { return s.rno || ('Order ' + s.n); }
+  function dayOf(s) { return dayC[s.id] || (dayC[s.id] = S.phDate(s.t)); }
+  function payNames(s) { var a = (s.pays || []).map(function (x) { return x.name; }); if (S.cashOf(s) > 0) a.push('Cash'); if (!a.length && s.pay === 'ewallet') a.push('E-wallet'); return a.join(' '); }
+  function payText(s) {
+    var parts = [];
+    if (s.pays && s.pays.length) s.pays.forEach(function (x) { parts.push(x.name + ' ' + N(x.amt)); }); else if (s.pay === 'ewallet') parts.push('E-wallet');
+    if (S.cashOf(s) > 0 || !parts.length) parts.unshift('Cash ' + N(s.tend) + (s.change ? ' (change ' + N(s.change) + ')' : ''));
+    return parts.join(' + ');
+  }
+  function itemsText(s) { return (s.lines || []).map(function (l) { return (l.qty > 1 ? l.qty + ' x ' : '') + l.name; }).join(', '); }
+  function hay(s) {
+    return hayC[s.id] || (hayC[s.id] = [label(s), String(s.n), (s.lines || []).map(function (l) { return l.name + ' ' + (l.opt || '') + ' ' + (l.note || ''); }).join(' '), String(s.net), Number(s.net).toFixed(2),
+      s.emp || '', S.typeText(s.type), payNames(s), (s.discs || []).map(function (r) { return r.name; }).join(' '), s.disc ? 'discount' : '', s.ref ? 'refunded' : ''].join(' ').toLowerCase());
+  }
+  function bounds() {
+    if (st.range === 'today') return [today, today];
+    if (st.range === '7') return [addDays(today, -6), today];
+    if (st.range === '30') return [addDays(today, -29), today];
+    if (st.range === 'custom') return [st.from || '0000-00-00', st.to || '9999-99-99'];
+    return ['0000-00-00', '9999-99-99'];
+  }
+  function filtered() {
+    var b = bounds(), toks = st.q.toLowerCase().split(/\s+/).filter(Boolean), out = [], all = S.sales(), i, k;
+    for (i = 0; i < all.length; i++) {
+      var s = all[i], d = dayOf(s);
+      if (d < b[0] || d > b[1]) continue;
+      if (st.status === 'paid' && s.ref) continue; if (st.status === 'ref' && !s.ref) continue;
+      if (st.type !== 'all' && s.type !== st.type) continue;
+      if (st.shift !== 'all' && String(s.shift) !== st.shift) continue;
+      if (st.disc === 'none' && s.disc > 0) continue; if (st.disc === 'any' && !(s.disc > 0)) continue;
+      if (st.disc.indexOf('n:') === 0 && !(s.discs || []).some(function (r) { return r.name === st.disc.slice(2); })) continue;
+      if (toks.length) { var h = hay(s); for (k = 0; k < toks.length; k++) if (h.indexOf(toks[k]) < 0) break; if (k < toks.length) continue; }
+      out.push(s);
+    }
+    return out.sort(function (a, c) { return c.t - a.t; });
+  }
+  function rowHtml(s) {
+    var multi = st.range !== 'today';
+    return '<button class="prow" data-id="' + esc(s.id) + '"><div class="what"><b>' + esc(label(s)) + ' · ' + esc(multi ? S.fmtDT(s.t) : S.fmtTime(s.t)) +
+      (s.ref ? '<span class="badge warn">Refunded</span>' : '') + (s.disc > 0 ? '<span class="badge best">Discount</span>' : '') + '</b><span class="s">' + esc(S.typeText(s.type)) + ' · ' + esc(itemsText(s)) +
+      '</span></div><div class="r num">' + N(s.net) + '</div><i>&#8250;</i></button>';
+  }
+  function paint() {
+    var list = filtered(), net = 0, paid = 0, refd = 0;
+    list.forEach(function (s) { if (s.ref) refd++; else { net += s.net; paid++; } });
+    $('sum').innerHTML = '<b>' + list.length + '</b> receipt' + (list.length === 1 ? '' : 's') + ' · <b class="num">' + N(S.r2(net)) + '</b>' + (refd ? ' · ' + refd + ' refunded (not counted)' : '');
+    var h = list.slice(0, st.limit).map(rowHtml).join('') || '<div class="empty">No receipts match.</div>';
+    if (list.length > st.limit) h += '<button class="prow" id="more"><div class="what"><b>Show more</b><span class="s">' + (list.length - st.limit) + ' more</span></div><i>&#8250;</i></button>';
+    $('list').innerHTML = h; $('subTitle').textContent = S.sales().length + ' saved on this phone';
+  }
+  function fillSelects() {
+    var names = {}, shifts = {};
+    S.sales().forEach(function (s) { (s.discs || []).forEach(function (r) { if (r && r.name) names[r.name] = 1; }); if (s.shift != null) shifts[s.shift] = 1; });
+    $('fDisc').innerHTML = '<option value="all">All</option><option value="none">No discount</option><option value="any">Any discount</option>' +
+      Object.keys(names).sort().map(function (n) { return '<option value="n:' + esc(n) + '">' + esc(n) + '</option>'; }).join('');
+    $('fShift').innerHTML = '<option value="all">All</option>' + Object.keys(shifts).sort(function (a, b) { return b - a; }).map(function (n) { return '<option value="' + esc(n) + '">Shift ' + esc(n) + '</option>'; }).join('');
+  }
+
+  /* ---------- one receipt ---------- */
+  function saleById(id) { return S.sales().filter(function (s) { return s.id === id; })[0]; }
+  function receiptText(s) { return window.MBPrinter.preview(function (p) { S.saleReceipt(p, s); }, 58).split('\n').filter(function (l) { return l !== '[ logo ]'; }).join('\n'); }
+  function audit(s) { var lb = label(s); return window.MBGuard.list(500).filter(function (e) { return String(e.d || '').indexOf(lb) >= 0; }).sort(function (a, b) { return a.t - b.t; }); }
+  function openSheet(id) {
+    var s = saleById(id); if (!s) return; openId = id;
+    var h = '<div class="sh-head"><div class="t"><b>' + esc(label(s)) + '</b><span>' + esc(S.fmtDT(s.t)) + ' · ' + esc(S.typeText(s.type)) + (s.ref ? ' · Refunded' : '') + '</span></div><button class="icon-btn" data-close aria-label="Close">&times;</button></div><div class="sh-body">';
+    (s.lines || []).forEach(function (l) {
+      var unit = Number(l.price) || 0; (l.addons || []).forEach(function (a) { unit += Number(a.p) || 0; });
+      var meta = []; if (l.opt) meta.push(l.opt); (l.addons || []).forEach(function (a) { meta.push('+ ' + a.n); });
+      h += '<div class="rrow"><span><b>' + l.qty + ' x ' + esc(l.name) + '</b>' + (meta.length ? '<small>' + esc(meta.join(', ')) + '</small>' : '') + (l.note ? '<small><i>' + esc(l.note) + '</i></small>' : '') +
+        (l.disc ? '<small>' + esc(l.dn || 'Discount') + (l.dk === 'pct' && l.dn && !/%/.test(l.dn) ? ' ' + esc(String(l.dv)) + '%' : '') + (l.dr ? ' · ' + esc(l.dr) : '') + '</small>' : '') + '</span><span class="num">' +
+        (l.disc ? '<s class="was">' + N(unit * l.qty) + '</s>' + N(S.r2(unit * l.qty - l.disc)) : N(unit * l.qty)) + '</span></div>';
+    });
+    var lineSum = 0; (s.lines || []).forEach(function (l) { lineSum += l.disc || 0; });
+    if (s.disc) h += '<div class="rrow"><span>Subtotal</span><span class="num">' + N(s.gross) + '</span></div><div class="rrow"><span>Discount' + (S.r2(s.disc - lineSum) > 0 && lineSum > 0 ? ' <small>including ' + N(lineSum) + ' on items</small>' : '') + '</span><span class="num">-' + N(s.disc) + '</span></div>';
+    h += '<div class="totalrow"><span>Total</span><span class="num">' + N(s.net) + '</span></div>';
+    h += '<div class="rrow"><span>Payment<small>' + esc(payText(s)) + '</small></span><span></span></div>';
+    h += '<div class="rrow"><span>Details<small>Employee ' + esc(s.emp || 'not recorded') + ' · Shift ' + esc(s.shift == null ? '-' : String(s.shift)) + ' · POS ' + esc(s.pos || '-') + '</small></span><span></span></div>';
+    var tr = ['Created ' + S.fmtDT(s.t) + (s.emp ? ' · ' + s.emp : '')], rep = S.sales().filter(function (x) { return x.fix === s.id; })[0];
+    if (s.fix) { var old = saleById(s.fix); tr.push('Correction of ' + (old ? label(old) : 'an earlier order')); }
+    var logs = audit(s), hadRef = false, prints = 0;
+    logs.forEach(function (e) { if (e.a === 'Reprint') { prints++; return; } if (/refund/i.test(e.a)) hadRef = true; tr.push(S.fmtDT(e.t) + ' · ' + e.a + (e.by ? ' · ' + e.by : '') + (e.why ? ' · ' + e.why : '')); });
+    if (s.ref && !hadRef) tr.push('Refunded' + (s.refT ? ' ' + S.fmtDT(s.refT) : ''));
+    if (rep) tr.push('Corrected by ' + label(rep));
+    if (s.removed && s.removed.length) tr.push('Taken out before payment: ' + s.removed.map(function (r) { return r.qty + ' x ' + r.name; }).join(', '));
+    tr.push(prints ? 'Reprinted ' + prints + (prints === 1 ? ' time' : ' times') : 'Not reprinted');
+    h += '<div class="trail">' + tr.map(function (t) { return '<div>' + esc(t) + '</div>'; }).join('') + '</div>';
+    h += '<button class="prow" data-act="img"><div class="what"><b>Share as image</b></div><i>&#8250;</i></button><button class="prow" data-act="text"><div class="what"><b>Share as text</b></div><i>&#8250;</i></button>' +
+      '<button class="prow" data-act="mail"><div class="what"><b>Email</b></div><i>&#8250;</i></button>' +
+      (s.ref ? '' : '<button class="prow" data-act="fix"><div class="what"><b>Correct</b><span class="s">Refund this and open it again to change</span></div><i>&#8250;</i></button><button class="prow" data-act="refund"><div class="what"><b style="color:var(--bad)">Refund</b></div><i>&#8250;</i></button>');
+    h += '</div><div class="sh-foot"><button class="text-btn" data-close>Close</button><button class="primary" data-act="print">Reprint</button></div>';
+    $('sheet').innerHTML = h; $('shade').classList.add('on');
+  }
+  function closeSheet() { $('shade').classList.remove('on'); openId = null; }
+  function fileName(s) { return 'receipt-' + label(s).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') ; }
+  function toImage(text) {
+    return new Promise(function (res) {
+      var lines = text.split('\n'), fs = 18, pad = 24, c = document.createElement('canvas'), x = c.getContext('2d');
+      x.font = fs + 'px monospace'; c.width = Math.ceil(x.measureText(new Array(33).join('M')).width) + pad * 2; c.height = lines.length * (fs + 6) + pad * 2;
+      x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.fillStyle = '#111'; x.font = fs + 'px monospace'; x.textBaseline = 'top';
+      lines.forEach(function (l, i) { x.fillText(l, pad, pad + i * (fs + 6)); });
+      c.toBlob(res, 'image/png');
+    });
+  }
+  function saveBlob(name, blob) { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
+  async function act(a, s) {
+    var lb = label(s);
+    if (a === 'print') {
+      var b = document.querySelector('[data-act="print"]'); b.disabled = true; var old = b.textContent; b.textContent = 'Printing...';
+      try { var m = await window.MBPrinter.print('pos', function (p) { p.center('*** REPRINT ***'); S.saleReceipt(p, s); }); window.MBGuard.log('Reprint', lb + ' · ' + N(s.net), ''); if (m) D.toast(m); }
+      finally { b.disabled = false; b.textContent = old; }
+    } else if (a === 'text') {
+      var t = receiptText(s);
+      try { if (navigator.share) await navigator.share({ title: 'Receipt ' + lb, text: t }); else { await navigator.clipboard.writeText(t); D.toast('Receipt copied'); } } catch (e) { if (e && e.name !== 'AbortError') D.toast('Could not share'); }
+    } else if (a === 'mail') {
+      location.href = 'mailto:?subject=' + encodeURIComponent('Receipt ' + lb + ' · Marina Bay\'s Cafe') + '&body=' + encodeURIComponent(receiptText(s));
+    } else if (a === 'img') {
+      var blob = await toImage(receiptText(s)), f = new File([blob], fileName(s) + '.png', { type: 'image/png' });
+      try { if (navigator.canShare && navigator.canShare({ files: [f] })) await navigator.share({ files: [f], title: 'Receipt ' + lb }); else { saveBlob(f.name, blob); D.toast('Image saved'); } }
+      catch (e) { if (e && e.name !== 'AbortError') D.toast('Could not share'); }
+    } else if (a === 'refund') {
+      var other = S.current() ? s.shift !== S.current().no : true;
+      if (!confirm('Refund ' + lb + ' for ' + N(s.net) + '? This cannot be undone.' + (other ? '\nThis order is from another shift. That shift\'s report does not change, but the totals for that day go down.' : ''))) return;
+      var g = await window.MBGuard.ask({ title: 'Refund ' + lb, detail: N(s.net) + ' will be counted as money returned.' });
+      if (!g.ok) return;
+      if (!S.refund(s.id)) { D.toast('Could not refund this order. Storage may be full.'); return; }
+      window.MBGuard.log('Refund', lb + ' · ' + N(s.net), g.reason); delete hayC[s.id]; paint(); openSheet(s.id); D.toast('Order refunded');
+    } else if (a === 'fix') {
+      location.href = 'pos.html?fix=' + encodeURIComponent(s.id);
+    }
+  }
+  $('sheet').addEventListener('click', function (e) {
+    if (e.target.closest('[data-close]')) { closeSheet(); return; }
+    var b = e.target.closest('[data-act]'), s = openId && saleById(openId); if (b && s) act(b.getAttribute('data-act'), s);
+  });
+  $('shade').addEventListener('click', function (e) { if (e.target === $('shade')) closeSheet(); });
+  $('list').addEventListener('click', function (e) {
+    if (e.target.closest('#more')) { st.limit += 50; paint(); return; }
+    var b = e.target.closest('button[data-id]'); if (b) openSheet(b.getAttribute('data-id'));
+  });
+
+  /* ---------- filters and export ---------- */
+  function q(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }
+  $('csv').onclick = function () {
+    var rows = ['Date,Time,Shift,Receipt,Order,Items,Gross,Discount,Net,Payment,Dining,Employee,Status'];
+    filtered().forEach(function (s) { rows.push([dayOf(s), q(S.fmtTime(s.t)), s.shift == null ? '' : s.shift, q(label(s)), s.n, q(itemsText(s)), s.gross, s.disc || 0, s.net, q(payNames(s)), q(S.typeText(s.type)), q(s.emp || ''), s.ref ? 'Refunded' : 'Paid'].join(',')); });
+    D.download('marina-bays-receipts.csv', rows.join('\n'), 'text/csv'); D.toast('CSV saved (' + (rows.length - 1) + ' receipts)');
+  };
+  var qt; $('q').addEventListener('input', function () { clearTimeout(qt); qt = setTimeout(function () { st.q = $('q').value; st.limit = 50; paint(); }, 150); });
+  [['fStatus', 'status'], ['fType', 'type'], ['fDisc', 'disc'], ['fShift', 'shift']].forEach(function (p) { $(p[0]).addEventListener('change', function () { st[p[1]] = $(p[0]).value; st.limit = 50; paint(); }); });
+  $('fFrom').addEventListener('change', function () { st.from = $('fFrom').value; st.limit = 50; paint(); });
+  $('fTo').addEventListener('change', function () { st.to = $('fTo').value; st.limit = 50; paint(); });
+  $('chips').addEventListener('click', function (e) {
+    var b = e.target.closest('.chip'); if (!b) return;
+    st.range = b.getAttribute('data-r'); st.limit = 50;
+    Array.prototype.forEach.call($('chips').children, function (c) { c.classList.toggle('on', c === b); });
+    $('dates').style.display = st.range === 'custom' ? '' : 'none'; paint();
+  });
+
+  fillSelects(); paint();
+  var m = /[?&]id=([^&]+)/.exec(location.search);
+  if (m) { var sale = saleById(decodeURIComponent(m[1])); if (sale) { st.range = 'all'; Array.prototype.forEach.call($('chips').children, function (c) { c.classList.toggle('on', c.getAttribute('data-r') === 'all'); }); paint(); openSheet(sale.id); } }
+})();
+</script>
+</body>
+</html>

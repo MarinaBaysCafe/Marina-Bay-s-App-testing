@@ -96,6 +96,8 @@
   var inventory = loadInventory();
   function saveInventory() { try { localStorage.setItem(INV_KEY, JSON.stringify(inventory)); return true; } catch (e) { return false; } }
   function getInventory() { return inventory; }
+  // re-read from storage into the same object (other code may hold a reference to it)
+  function reloadInventory() { var f = loadInventory(); Object.keys(inventory).forEach(function (k) { delete inventory[k]; }); Object.keys(f).forEach(function (k) { inventory[k] = f[k]; }); return inventory; }
   function setInventory(v) { inventory = v; return saveInventory(); }
   function resetInventory() { inventory = defaultInventory(); saveInventory(); return inventory; }
 
@@ -119,7 +121,7 @@
     uid: uid, clone: clone, peso: peso, pesoShort: pesoShort, esc: esc, download: download, todayPH: todayPH, toast: toast,
     getMenu: getMenu, setMenu: setMenu, saveMenu: saveMenu, resetMenu: resetMenu, defaultMenu: defaultMenu,
     cat: cat, item: item, itemsIn: itemsIn, addonsFor: addonsFor, priceText: priceText, plainOption: plainOption,
-    getInventory: getInventory, setInventory: setInventory, saveInventory: saveInventory, resetInventory: resetInventory,
+    reloadInventory: reloadInventory, getInventory: getInventory, setInventory: setInventory, saveInventory: saveInventory, resetInventory: resetInventory,
     getRecipes: getRecipes, setRecipes: setRecipes, saveRecipes: saveRecipes, recipeCost: recipeCost
   };
 })();

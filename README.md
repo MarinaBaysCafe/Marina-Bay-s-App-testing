@@ -99,6 +99,14 @@ Do not share the repository or the web address outside the cafe.
 - If two phones change the same record, the one saved last wins.
 - Firestore rules: the new lists use the collections `sync_config` and `sync_invlog`. If your rules only allow certain collections by name, add these two.
 
+## Public menu and QR code
+- In the Menu app, open the Items tab and tap **Publish menu**. This sends a safe copy of the menu (names, sizes, prices, add-ons, sold out) to a public page. Costs, recipes, stock and sales are never sent. Items marked "price needs checking" are left out. You must be signed in on the Sync page.
+- **Print QR code** makes table cards (A6) or a poster (A4), one card per table if you type table numbers like 1-10. Use the print window's Save as PDF if you prefer a file.
+- Customers scan the code and see `menu-public.html`. No login. It also works again from the phone's saved copy when the signal is weak.
+- Publish again after you change a price or mark something sold out. The Menu app tells you when the published page is behind.
+- Before the first publish, put the rules from `firestore.rules` in the Firebase console (Firestore, Rules) and put your own emails in the `staff()` list. This also locks the other cafe data to those accounts. Check in the Rules Playground first.
+- The QR code opens the address of the site where you printed it. If the site address changes, print new codes.
+
 ## Dates and time
 
 All dates and times use Philippine time (Asia/Manila), whatever the device's own time zone is. The calendar starts on today's Philippine date and moves to the next day at midnight.
@@ -110,3 +118,5 @@ All dates and times use Philippine time (Asia/Manila), whatever the device's own
 - `pos-config.js` holds the editable settings, `inv-log.js` the daily inventory record and the .xlsx writer, `shift-lib.js` sales and shifts, `cloud.js` the sync.
 - When a file changes, raise the version number in `sw.js` so phones load the new files. The app now opens from the phone's saved copy first (fast on weak internet) and updates in the background, so a new version shows on the second open unless the version number is raised.
 - `guard.js` holds the PIN approval and the activity log.
+- `menu-snapshot.js` builds the public menu copy, `menu-public.html` shows it, `qr-print.html` prints the QR cards, `qrcode.js` is the MIT licensed QR library (see `qrcode-LICENSE.txt`).
+- Tests: open `tests.html`, or run `node tests-money.js`, `node tests-shift.js`, `node tests-storage.js`, `node tests-public.js`, `node tests-sync.js`.

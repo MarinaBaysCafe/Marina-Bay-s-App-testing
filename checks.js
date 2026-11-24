@@ -28,6 +28,26 @@
           { label: 'Keep it open', keep: true }] });
     }
 
+    /* 1b. two orders with the same receipt number */
+    var byNo = {};
+    sales.forEach(function (s) { if (s.rno) (byNo[s.rno] = byNo[s.rno] || []).push(s); });
+    Object.keys(byNo).forEach(function (rno) {
+      var list = byNo[rno]; if (list.length < 2) return;
+      add({ id: 'dup-rno-' + rno, title: 'Receipt number ' + rno + ' is used ' + list.length + ' times',
+        detail: 'Orders at ' + list.map(function (s) { return S.fmtDT(s.t); }).join(', ') + '. This can happen when two phones use the same POS name. Receipts already printed keep the old number.',
+        choices: [{ label: 'Give the later ones new numbers', run: function () { S.renumber(rno); } }, { label: 'It is fine, hide this', keep: true }] });
+    });
+
+    /* 1c. one shift number used by two different shifts */
+    var sids = {};
+    sales.forEach(function (s) { if (s.shift != null && s.sid) (sids[s.shift] = sids[s.shift] || {})[s.sid] = 1; });
+    Object.keys(sids).forEach(function (no) {
+      if (Object.keys(sids[no]).length < 2) return;
+      add({ id: 'mixshift-' + no, title: 'Shift ' + no + ' has orders from two different shifts',
+        detail: 'Two phones probably opened a shift at the same time and both used number ' + no + '. The report may count both. Check the starting cash and the counted cash.',
+        choices: [{ label: 'Open the report', href: 'shift.html?no=' + no }, { label: 'It is fine, hide this', keep: true }] });
+    });
+
     /* 2. shifts with a big cash difference */
     sh.hist.forEach(function (r) {
       if (r.diff != null && Math.abs(r.diff) >= 100) add({ id: 'diff-' + r.no, title: 'Shift ' + r.no + ' cash is off by ' + S.sg(r.diff),
