@@ -14,7 +14,7 @@
    "flat", or "none". Cups are named from the size: 16 oz iced -> 16oz dabba, 12 oz hot -> 12oz double wall. */
 (function () {
   var D = window.MBData;
-  var SALES_KEY = 'marinabays_sales_v1', SHIFTS_KEY = 'marinabays_shifts_v1', POS_KEY = 'marinabays_posname_v1', USER_KEY = 'marinabays_lastuser_v1';
+  var SALES_KEY = 'marinabays_sales_v1', SHIFTS_KEY = 'marinabays_shifts_v1', POS_KEY = 'marinabays_posname_v1', USER_KEY = 'marinabays_lastuser_v1', DEV_KEY = 'marinabays_device_v1';
   var EXP_KEY = 'marinabays_expenses_v1', MONEY_KEY = 'marinabays_money_v1';
   var TZ = 'Asia/Manila', STORE = "Marina Bay's Cafe";
   // details printed on order and sale receipts
@@ -78,12 +78,15 @@
   /* ---------- sales ---------- */
   // cartLines come from the POS cart; pay = { disc, method, tend }
   function makeSale(cartLines, pay) {
-    var gross = 0, lines = cartLines.map(function (l) {
+    var gross = 0, lines = cartLines.map(function (l, li) {
       var unit = Number(l.price) || 0; (l.addons || []).forEach(function (a) { unit += Number(a.p) || 0; });
       gross += unit * l.qty;
       var catId = l.cat || ((D.item(String(l.k || '').split('|')[0]) || {}).cat), cat = catId ? D.cat(catId) : null;
-      return { name: l.name, opt: l.opt || '', price: Number(l.price) || 0, addons: (l.addons || []).map(function (a) { return { n: a.n, p: Number(a.p) || 0 }; }),
+      var o = { name: l.name, opt: l.opt || '', price: Number(l.price) || 0, addons: (l.addons || []).map(function (a) { return { n: a.n, p: Number(a.p) || 0 }; }),
                note: l.note || '', qty: l.qty, cup: cupName(l.opt), lid: lidName(cat, l.opt) };
+      var da = pay.lineDisc ? Number(pay.lineDisc[li]) || 0 : 0;      // the discount chosen on this line (pesos)
+      if (da > 0 && l.ld) { o.disc = da; o.dk = l.ld.kind; o.dv = Number(l.ld.value) || 0; o.dn = l.ld.name || ''; if (l.ld.id) o.di = l.ld.id; if (l.ld.reason) o.dr = l.ld.reason; }
+      return o;
     });
     gross = r2(gross);
     var disc = r2(Math.min(pay.disc || 0, gross)), net = r2(gross - disc);
@@ -94,16 +97,54 @@
     } else if (pay.method === 'ewallet') { pays.push({ id: 'ewallet', name: 'E-wallet', amt: net }); nonCash = net; }
     else cashTend = pay.tend || net;
     var ca = r2(net - nonCash);
-    var cur = shifts.cur, count = cur ? sales.sales.filter(function (s) { return s.shift === cur.no; }).length : 0;
-    var posNo = /(\d+)/.exec(cur && cur.pos ? cur.pos : posName());
-    return { id: D.uid('sale'), type: pay.type === 'take' ? 'take' : 'dine', emp: cur ? cur.openedBy || '' : '', pos: cur && cur.pos ? cur.pos : posName(),
-             rno: '#' + (posNo ? posNo[1] : '1') + '-' + (sales.sales.length + 1), t: Date.now(), shift: cur ? cur.no : null, n: count + 1, lines: lines, gross: gross, disc: disc, net: net,
+    var cur = shifts.cur, mine = cur ? sales.sales.filter(function (s) { return s.shift === cur.no; }) : [], count = mine.length;
+    mine.forEach(function (s) { if ((s.n || 0) > count) count = s.n; });   // highest order number so far, so a deleted order never makes two orders share a number
+    var posNo = /(\d+)/.exec(cur && cur.pos ? cur.pos : posName()), prefix = '#' + (posNo ? posNo[1] : '1') + '-';
+    var sale = { id: D.uid('sale'), type: pay.type === 'take' ? 'take' : 'dine', emp: cur ? cur.openedBy || '' : '', pos: cur && cur.pos ? cur.pos : posName(),
+             rno: prefix + seqPeek(prefix), t: Date.now(), shift: cur ? cur.no : null, n: count + 1, lines: lines, gross: gross, disc: disc, net: net,
              pay: nonCash === 0 ? 'cash' : (ca === 0 ? 'ewallet' : 'split'), ca: ca, pays: pays, discs: pay.discs || [],
              tend: r2(cashTend), change: r2(Math.max(0, cashTend - ca)), ref: 0 };
+    if (cur && cur.id) sale.sid = cur.id;     // which shift (not just which number), to spot two shifts that used the same number
+    return sale;
+  }
+  /* Receipt numbers: '#<pos>-<n>'. The last number used is kept on this phone (not synced, not in backups), so a number is never
+     used twice, not after a delete, not after a reset, not after a restore. It also continues from the highest number in the saved orders. */
+  function seqPeek(prefix) {
+    var dev = load(DEV_KEY, {}), top = Number((dev.seq || {})[prefix]) || 0;
+    sales.sales.forEach(function (s) {
+      if (String(s.rno || '').indexOf(prefix) !== 0) return;
+      var m = /(\d+)$/.exec(s.rno); if (m && +m[1] > top) top = +m[1];
+    });
+    return top + 1;
+  }
+  function seqCommit(rno) {
+    var m = /^(.*-)(\d+)$/.exec(String(rno || '')); if (!m) return;
+    var dev = load(DEV_KEY, {}); dev.seq = dev.seq || {};
+    if ((+dev.seq[m[1]] || 0) >= +m[2]) return;
+    dev.seq[m[1]] = +m[2]; try { localStorage.setItem(DEV_KEY, JSON.stringify(dev)); } catch (e) {}
+  }
+  // orders that share one receipt number: the earliest keeps it, the others get new numbers
+  function renumber(rno) {
+    var same = sales.sales.filter(function (s) { return s.rno === rno; }).sort(function (a, b) { return a.t - b.t; });
+    var m = /^(.*-)(\d+)$/.exec(String(rno || '')); if (same.length < 2 || !m) return 0;
+    same.slice(1).forEach(function (s) { s.rno = m[1] + seqPeek(m[1]); seqCommit(s.rno); });
+    saveSales(); return same.length - 1;
+  }
+  // text for a "are you sure" box when this phone has changes the others have not seen (or is offline), '' when all is well
+  function syncWarning(kind) {
+    var C = window.MBCloud; if (!C || !C.configured) return '';
+    var st = C.status(); if (!st || !st.user) return '';
+    var p = C.pending(), n = (p.sales || 0) + (p.shifts || 0) + (p.expenses || 0) + (p.counter || 0), bad = st.state === 'offline' || st.state === 'error';
+    if (!n && !bad) return '';
+    var why = n ? n + (n === 1 ? ' change on this phone is' : ' changes on this phone are') + ' not synced yet' : 'This phone is offline';
+    if (kind === 'close') return why + '. Sales or expenses from another phone may be missing from this shift report. End the shift anyway?';
+    return why + '. If another phone already opened a shift, wait until it syncs, or two shifts can end up with the same number. Start a shift anyway?';
   }
   function cashOf(s) { return s.ca != null ? s.ca : (s.pay === 'cash' ? s.net : 0); }
   /* Cups and lids come off the stock the moment an order is saved (s.inv remembers what was taken) and go back on a refund or delete. */
+  function freshStock() { if (D.reloadInventory) D.reloadInventory(); if (window.MBInvLog && window.MBInvLog.reload) window.MBInvLog.reload(); }
   function stockOut(s) {
+    freshStock();
     var items = D.getInventory().items || [], need = {}, took = {};
     (s.lines || []).forEach(function (l) { [l.cup, l.lid].forEach(function (k) { if (k) need[k] = (need[k] || 0) + l.qty; }); });
     Object.keys(need).forEach(function (k) {
@@ -115,7 +156,7 @@
     s.inv = took; if (Object.keys(took).length) D.saveInventory();
   }
   function stockBack(s) {
-    if (!s || !s.inv) return; var items = D.getInventory().items || [], back = false;
+    if (!s || !s.inv) return; freshStock(); var items = D.getInventory().items || [], back = false;
     Object.keys(s.inv).forEach(function (id) {
       var it = items.filter(function (i) { return i.id === id; })[0]; if (!it || it.qty == null) return;
       var before = it.qty; it.qty = before + s.inv[id]; it.updated = phDate(Date.now()); back = true;
@@ -125,8 +166,8 @@
   }
   /* orders of a shift saved before this existed, or on another phone, are taken off when the shift closes */
   function settleShift(no) { sales.sales.forEach(function (s) { if (s.shift === no && !s.ref && s.inv === undefined) stockOut(s); }); saveSales(); }
-  function addSale(s) { stockOut(s); sales.sales.push(s); return saveSales(); }
-  function refund(id) { var s = sales.sales.filter(function (x) { return x.id === id; })[0]; if (!s || s.ref) return false; s.ref = 1; s.refT = Date.now(); stockBack(s); return saveSales(); }
+  function addSale(s) { stockOut(s); sales.sales.push(s); if (saveSales()) { seqCommit(s.rno); return true; } sales.sales.pop(); stockBack(s); return false; }
+  function refund(id) { var s = sales.sales.filter(function (x) { return x.id === id; })[0]; if (!s || s.ref) return false; s.ref = 1; s.refT = Date.now(); stockBack(s); if (saveSales()) return true; s.ref = 0; delete s.refT; return false; }
   /* Delete an order. Only orders of the shift that is still open (a closed shift's report is already fixed). */
   function deleteSale(id) {
     var s = sales.sales.filter(function (x) { return x.id === id; })[0], cur = shifts.cur;
@@ -159,7 +200,7 @@
   function start(cash, by) {
     if (shifts.cur) return shifts.cur;
     var maxNo = shifts.hist.reduce(function (m, h) { return Math.max(m, h.no); }, 0);
-    shifts.cur = { no: Math.max(shifts.nextNo, maxNo + 1), openedAt: Date.now(), openedBy: String(by || '').trim(), startCash: r2(cash), pos: posName() };
+    shifts.cur = { id: D.uid('shift'), no: Math.max(shifts.nextNo, maxNo + 1), openedAt: Date.now(), openedBy: String(by || '').trim(), startCash: r2(cash), pos: posName() };
     shifts.nextNo = shifts.cur.no + 1; rememberUser(shifts.cur.openedBy); saveShifts(); return shifts.cur;
   }
 
@@ -352,6 +393,7 @@
       var unit = Number(l.price) || 0; (l.addons || []).forEach(function (a) { unit += Number(a.p) || 0; });
       p.row(l.name, num(unit * l.qty));
       p.text(l.qty + ' x \u20b1' + num(unit), { indent: '' });
+      if (l.disc) p.row('  ' + (l.dn || 'Discount') + (l.dk === 'pct' && l.dn && !/%/.test(l.dn) ? ' ' + l.dv + '%' : ''), '-' + num(l.disc));
       var extra = []; if (l.opt) extra.push(l.opt); (l.addons || []).forEach(function (a) { extra.push('+ ' + a.n); });
       extra.forEach(function (x) { p.text('  ' + x, { indent: '    ' }); });
       if (l.note) p.text('  Note: ' + l.note, { indent: '    ' });
@@ -394,7 +436,7 @@
 
   window.MBShift = {
     num: num, sg: sg, fmtDT: fmtDT, fmtTime: fmtTime, phDate: phDate, r2: r2, cupName: cupName, lidName: lidName,
-    sales: function () { return sales.sales; }, salesOf: salesOf, makeSale: makeSale, cashOf: cashOf, addSale: addSale, refund: refund, deleteSale: deleteSale, deleteShift: deleteShift,
+    sales: function () { return sales.sales; }, salesOf: salesOf, makeSale: makeSale, cashOf: cashOf, addSale: addSale, refund: refund, deleteSale: deleteSale, deleteShift: deleteShift, renumber: renumber, syncWarning: syncWarning,
     shifts: function () { return shifts; }, saveShifts: saveShifts, index: buildIndex, day: day, month: month, deductInventory: deductInventory, settleShift: settleShift, current: current, start: start, close: close, report: report, lastActual: lastActual,
     lastStart: lastStart, saveSales: saveSales, posName: posName, setPosName: setPosName, lastUser: lastUser, countedCash: countedCash, expensesBetween: expensesBetween,
     reportReceipt: reportReceipt, saleReceipt: saleReceipt, orderReceipt: orderReceipt, typeText: typeText, cafe: cafe

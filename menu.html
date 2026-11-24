@@ -41,6 +41,12 @@
       <div class="pick"><select id="catSel" aria-label="Show items from"></select></div>
       <div id="itemList"></div>
       <button class="add-btn" id="addItem">Add item</button>
+      <div class="pubbox" id="pubBox">
+        <div class="sect" style="padding:0 0 2px">Public menu and QR code</div>
+        <p class="help2" id="pubStatus" role="status" style="margin:0 0 8px">Checking...</p>
+        <div class="frow"><label for="pubNote">Message at the top (optional)</label><input class="field" id="pubNote" type="text" maxlength="160" placeholder="For example, Open daily 8am to 9pm" autocomplete="off"></div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="primary" id="pubGo" type="button" disabled>Publish menu</button><a class="text-btn" href="menu-public.html" target="_blank" rel="noopener" style="min-height:44px;display:inline-flex;align-items:center">Preview</a><a class="text-btn" href="qr-print.html" style="min-height:44px;display:inline-flex;align-items:center">Print QR code</a></div>
+      </div>
     </section>
 
     <!-- ITEM EDIT -->
@@ -118,6 +124,7 @@
 
 <script src="menu-default.js"></script>
 <script src="app-data.js"></script>
+<script src="menu-snapshot.js"></script>
 <script>
 (function () {
   var D = window.MBData, esc = D.esc, $ = function (id) { return document.getElementById(id); };
@@ -388,5 +395,45 @@
   }
 })();
 </script>
+<script>
+/* Public menu: makes the safe copy of the menu and sends it to the page customers see. */
+(function () {
+  var D = window.MBData, SN = window.MBMenuSnap, PUB = 'marinabays_menu_pub_v1';
+  function $(id) { return document.getElementById(id); }
+  function load() { try { return JSON.parse(localStorage.getItem(PUB)) || {}; } catch (e) { return {}; } }
+  function save(o) { try { localStorage.setItem(PUB, JSON.stringify(o)); } catch (e) {} }
+  function current() { return SN.build(D.getMenu(), { name: "Marina Bay's Cafe", note: $('pubNote').value }); }
+  function when(t) { return new Date(t).toLocaleString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+  function paint() {
+    var p = load(), r = current(), st = (window.MBCloud && window.MBCloud.status && window.MBCloud.status()) || {}, signed = !!st.user, text;
+    if (!p.t) text = 'Not published yet.';
+    else text = 'Last published ' + when(p.t) + (p.h === SN.hash(r.json) ? '. Up to date.' : '. The menu has changed since. Publish again to update the page.');
+    if (r.skipped) text += ' ' + r.skipped + (r.skipped === 1 ? ' item is' : ' items are') + ' left out because the price needs checking.';
+    if (!r.ok) text += ' The menu is too big to publish.';
+    if (!signed) text += ' Sign in on the Sync page to publish.';
+    $('pubStatus').textContent = text;
+    $('pubGo').disabled = !signed || !r.ok || !r.items;
+  }
+  $('pubNote').value = load().note || '';
+  $('pubNote').addEventListener('input', paint);
+  $('pubGo').addEventListener('click', async function () {
+    var r = current(), b = $('pubGo'); if (!r.ok || !r.items) return;
+    b.disabled = true; b.textContent = 'Publishing...';
+    try {
+      await window.MBCloud.publishMenu(r.json);
+      save({ t: Date.now(), h: SN.hash(r.json), note: $('pubNote').value }); D.toast('Menu published');
+    } catch (e) {
+      var m = String((e && (e.code || e.message)) || e);
+      D.toast(/permission|denied/i.test(m) ? 'Not allowed. Check the Firestore rules (see README).' : /offline|network|unavailable/i.test(m) ? 'No internet. Try again when online.' : 'Could not publish: ' + m.slice(0, 80));
+    }
+    b.textContent = 'Publish menu'; paint();
+  });
+  if (window.MBCloud && window.MBCloud.onStatus) window.MBCloud.onStatus(paint);
+  setInterval(paint, 2500); paint();
+})();
+</script>
+<style>
+  .pubbox { margin: 18px 16px 24px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+</style>
 </body>
 </html>

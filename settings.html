@@ -30,8 +30,10 @@
   <div class="note">Cash is always there. Add e-wallets or cards; they can be split with cash when charging.</div>
   <div id="methods"></div><div class="row"><button class="add" id="addM">Add method</button></div>
   <h3>Discounts</h3>
-  <div class="note">Shown as toggles when charging. Toggled discounts add up, and each can apply to the whole order or one item.</div>
+  <div class="note">Shown as toggles when charging, and as quick buttons when you tap Discount on an item in the order. Each can apply to the whole order or one item.</div>
   <div id="discs"></div><div class="row"><button class="add" id="addD">Add discount</button></div>
+  <label class="row"><input type="checkbox" id="dStack" style="flex:none"> Allow several discounts on the same order (they add up)</label>
+  <div class="row">A manual discount above <input class="n" id="dLimit" type="number" min="0" max="100"> % needs the PIN (0 = always)</div>
   <h3>Inventory units</h3>
   <div id="units"></div><div class="row"><button class="add" id="addU">Add unit</button></div>
   <h3>Activity log</h3>
@@ -50,6 +52,7 @@
   function paint() {
     var g = C.get();
     $('auto').checked = g.autoPrint;
+    $('dStack').checked = g.discRules.stack; $('dLimit').value = g.discRules.limitPct;
     $('methods').innerHTML = g.methods.map(function (m, i) {
       return '<div class="row"><input data-k="m" data-i="' + i + '" value="' + esc(m.name) + '"' + (m.id === 'cash' ? ' disabled' : '') + '>' +
         (m.id === 'cash' ? '' : '<button class="rm" data-rm="m' + i + '">Remove</button>') + '</div>';
@@ -65,6 +68,8 @@
   document.addEventListener('input', function (e) {
     var k = e.target.getAttribute('data-k'), i = +e.target.getAttribute('data-i'), g = C.get();
     if (e.target.id === 'auto') { g.autoPrint = e.target.checked; C.save(); return; }
+    if (e.target.id === 'dStack') { g.discRules.stack = e.target.checked; C.save(); return; }
+    if (e.target.id === 'dLimit') { g.discRules.limitPct = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)); C.save(); return; }
     if (!k) return;
     if (k === 'm') g.methods[i].name = e.target.value;
     else if (k === 'dn') g.discounts[i].name = e.target.value;

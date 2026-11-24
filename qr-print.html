@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<!-- Copyright (c) 2026 Marina Bay's Cafe. All rights reserved. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script src="security.js"></script>
+<meta name="robots" content="noindex, nofollow">
+<meta name="author" content="Marina Bay's Cafe">
+<meta name="copyright" content="Copyright 2026 Marina Bay's Cafe. All rights reserved.">
+<title>Menu QR code | Marina Bay's Cafe</title>
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/counter-apple-touch-icon.png">
+<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="wide.css">
+<link rel="stylesheet" href="brand.css">
+<style>
+  :root { --ar: 105 / 148; }
+  .qp-form { padding: 12px 16px; display: grid; gap: 10px; }
+  .qp-form .help2 { margin: 0; }
+  .qp-form code { word-break: break-all; }
+  .cards { padding: 8px 16px 24px; display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; }
+  .card { container-type: inline-size; width: min(100%, 320px); aspect-ratio: var(--ar); background: #fff; color: #14262e; border: 1px solid #c9d3d0; border-radius: 6px; padding: 6cqw; display: flex; flex-direction: column; align-items: center; justify-content: space-between; text-align: center; box-shadow: 0 1px 6px rgba(13, 58, 78, .12); }
+  .card img { width: 16cqw; height: 16cqw; border-radius: 3cqw; }
+  .card .nm { font-family: "Palatino Linotype", Palatino, Georgia, serif; font-weight: 700; font-size: 7.5cqw; color: #0d3a4e; line-height: 1.1; }
+  .card .hd { font-size: 6cqw; font-weight: 700; line-height: 1.2; }
+  .card svg { width: 66cqw; height: 66cqw; display: block; }
+  .card .tb { font-family: "Palatino Linotype", Palatino, Georgia, serif; font-size: 11cqw; font-weight: 700; color: #0d3a4e; line-height: 1; }
+  .card .sm { font-size: 3.2cqw; color: #52646c; word-break: break-all; }
+  body.poster { --ar: 210 / 297; }
+  body.poster .card { width: min(100%, 420px); }
+  body.poster .card svg { width: 78cqw; height: 78cqw; }
+  @media print {
+    html, body { background: #fff !important; }
+    .noprint, .top { display: none !important; }
+    .app { padding: 0 !important; max-width: none !important; }
+    .cards { display: block; padding: 0; }
+    .card { width: var(--pw); height: var(--ph); aspect-ratio: auto; border: 0; border-radius: 0; box-shadow: none; margin: 0; page-break-after: always; break-after: page; }
+  }
+</style>
+<style id="pgsz">@page { size: 105mm 148mm; margin: 0 }</style>
+</head>
+<body class="pg-menu">
+<div class="app">
+  <div class="top">
+    <a href="index.html" aria-label="Home" style="display:flex"><img src="icons/logo-64.png" alt=""></a>
+    <div><b>Marina Bay's Cafe</b><span class="sub">Menu QR code</span></div>
+    <nav class="apps" aria-label="Apps"><a href="menu.html">Menu</a><a href="index.html">All apps</a></nav>
+  </div>
+  <main class="noprint">
+    <div class="qp-form">
+      <p class="help2">The code opens your public menu page. Publish the menu first in the Menu app. Then print, or choose Save as PDF in the print window.</p>
+      <div class="frow"><label for="qLayout">Size</label><select class="field" id="qLayout"><option value="card">Table card (A6)</option><option value="poster">Poster (A4)</option></select></div>
+      <div class="frow"><label for="qHead">Text above the code</label><input class="field" id="qHead" type="text" maxlength="40" value="Scan to see our menu" autocomplete="off"></div>
+      <div class="frow"><label for="qTables">Table numbers</label><input class="field" id="qTables" type="text" maxlength="120" placeholder="Empty for one card, or 1-10" autocomplete="off"></div>
+      <div class="frow"><label for="qUrl">Menu address</label><input class="field" id="qUrl" type="url" autocomplete="off"></div>
+      <p class="help2" id="qMsg" role="status"></p>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="primary" id="qPrint" type="button">Print or save as PDF</button><a class="text-btn" id="qTest" href="menu-public.html" target="_blank" rel="noopener" style="min-height:44px;display:inline-flex;align-items:center">Open the menu page</a></div>
+    </div>
+  </main>
+  <div class="cards" id="cards" aria-label="Preview"></div>
+</div>
+<script src="menu-snapshot.js"></script>
+<script src="qrcode.js"></script>
+<script>
+(function () {
+  'use strict';
+  var SN = window.MBMenuSnap, NS = 'http://www.w3.org/2000/svg';
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function baseUrl() { var u = new URL('menu-public.html', location.href); u.search = ''; u.hash = ''; return u.href; }
+  function validUrl(s) { try { var u = new URL(s); return u.protocol === 'https:' || u.protocol === 'http:' ? u : null; } catch (e) { return null; } }
+  function qrSvg(text) {
+    var q = qrcode(0, 'M'); q.addData(text); q.make();
+    var n = q.getModuleCount(), qz = 4, size = n + qz * 2, svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + size + ' ' + size); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'QR code for the menu'); svg.setAttribute('shape-rendering', 'crispEdges');
+    var bg = document.createElementNS(NS, 'rect'); bg.setAttribute('width', size); bg.setAttribute('height', size); bg.setAttribute('fill', '#fff'); svg.appendChild(bg);
+    var p = document.createElementNS(NS, 'path'); p.setAttribute('fill', '#000'); p.setAttribute('d', SN.qrPath(function (r, c) { return q.isDark(r, c); }, n, qz)); svg.appendChild(p);
+    return svg;
+  }
+  function paint() {
+    var poster = $('qLayout').value === 'poster', cards = $('cards'), msg = $('qMsg'), u = validUrl($('qUrl').value.trim());
+    document.body.classList.toggle('poster', poster);
+    document.documentElement.style.setProperty('--pw', poster ? '210mm' : '105mm'); document.documentElement.style.setProperty('--ph', poster ? '297mm' : '148mm');
+    $('pgsz').textContent = '@page { size: ' + (poster ? 'A4' : '105mm 148mm') + '; margin: 0 }';
+    cards.textContent = '';
+    if (!u) { msg.textContent = 'The menu address is not valid. It must start with https://'; $('qPrint').disabled = true; return; }
+    var list = SN.tables($('qTables').value), raw = $('qTables').value.trim(), head = $('qHead').value.trim();
+    if (raw && !list.length) { msg.textContent = 'No table numbers found. Use for example 1-10 or 1,2,5.'; $('qPrint').disabled = true; return; }
+    if (!list.length) list = [''];
+    try {
+      list.forEach(function (t) {
+        var link = new URL(u.href); link.hash = ''; if (t) link.searchParams.set('table', t);
+        var c = el('div', 'card'), img = el('img'); img.src = 'icons/app-192.png'; img.alt = '';
+        c.appendChild(img); c.appendChild(el('div', 'nm', "Marina Bay's Cafe")); if (head) c.appendChild(el('div', 'hd', head));
+        c.appendChild(qrSvg(link.href)); c.appendChild(t ? el('div', 'tb', 'Table ' + t) : el('div', 'tb', '\u00a0')); c.appendChild(el('div', 'sm', link.href));
+        cards.appendChild(c);
+      });
+      msg.textContent = list.length === 1 && !list[0] ? 'One card.' : list.length + ' cards, one for each table.'; $('qPrint').disabled = false;
+    } catch (e) { cards.textContent = ''; msg.textContent = 'This address is too long for a QR code.'; $('qPrint').disabled = true; }
+    $('qTest').href = u.href;
+  }
+  $('qUrl').value = baseUrl();
+  ['qLayout', 'qHead', 'qTables', 'qUrl'].forEach(function (id) { $(id).addEventListener('input', paint); $(id).addEventListener('change', paint); });
+  $('qPrint').addEventListener('click', function () { window.print(); });
+  paint();
+})();
+</script>
+</body>
+</html>

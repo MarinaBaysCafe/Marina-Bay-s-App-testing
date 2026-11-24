@@ -9,6 +9,7 @@
   function load() { try { var v = JSON.parse(localStorage.getItem(KEY)); if (v && v.days) return v; } catch (e) {} return { days: {} }; }
   var log = load();
   function save() { try { localStorage.setItem(KEY, JSON.stringify(log)); return true; } catch (e) { return false; } }
+  function reload() { log = load(); }
   function items() { return D().getInventory().items || []; }
   function item(id) { return items().filter(function (i) { return i.id === id; })[0]; }
   function localToday() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
@@ -180,5 +181,5 @@
     var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'inventory-' + from.slice(0, 7) + '.xlsx';
     document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   }
-  window.MBInvLog = { clear: clear, range: range, adjust: adjust, onQty: onQty, logAuto: logAuto, restoreAuto: restoreAuto, setDay: setDay, exportXlsx: exportXlsx, localToday: localToday, addDays: addDays, LATE_DAYS: LATE_DAYS };
+  window.MBInvLog = { reload: reload, clear: clear, range: range, adjust: adjust, onQty: onQty, logAuto: logAuto, restoreAuto: restoreAuto, setDay: setDay, exportXlsx: exportXlsx, localToday: localToday, addDays: addDays, LATE_DAYS: LATE_DAYS };
 })();
